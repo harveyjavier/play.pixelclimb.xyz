@@ -10,13 +10,31 @@
 
 	type Eth = {
 		request(args: { method: string; params?: unknown }): Promise<unknown>;
-		on?(event: string, cb: () => void): void;
+		on?(event: string, cb: (value: unknown) => void): void;
+		removeListener?(event: string, cb: (value: unknown) => void): void;
 	};
 	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
 
 	let account = $state<string | null>(null);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
+
+	// MetaMask fires chainChanged for our own switch after connect() resolves, so only a move off NEAR testnet drops the session.
+	$effect(() => {
+		const eth = ethereum();
+		const onChain = (id: unknown) => {
+			if (id !== CHAIN.chainId) account = null;
+		};
+		const onAccounts = (accounts: unknown) => {
+			if (account) account = (accounts as string[])[0] ?? null;
+		};
+		eth?.on?.('chainChanged', onChain);
+		eth?.on?.('accountsChanged', onAccounts);
+		return () => {
+			eth?.removeListener?.('chainChanged', onChain);
+			eth?.removeListener?.('accountsChanged', onAccounts);
+		};
+	});
 
 	async function useNearTestnet(eth: Eth) {
 		try {
@@ -59,9 +77,6 @@
 			const [first] = (await eth.request({ method: 'eth_requestAccounts' })) as string[];
 			await useNearTestnet(eth);
 			account = first;
-			// Leaving NEAR testnet or swapping accounts in MetaMask drops the session; the user reconnects.
-			eth.on?.('chainChanged', () => (account = null));
-			eth.on?.('accountsChanged', () => (account = null));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not connect MetaMask.';
 		} finally {
