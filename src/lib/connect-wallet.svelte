@@ -30,6 +30,15 @@
 		};
 		eth?.on?.('chainChanged', onChain);
 		eth?.on?.('accountsChanged', onAccounts);
+		// eth_accounts never prompts; it restores the session after a reload if the site still has permission.
+		eth
+			?.request({ method: 'eth_accounts' })
+			.then(async (accounts) => {
+				const [first] = accounts as string[];
+				if (first && (await eth.request({ method: 'eth_chainId' })) === CHAIN.chainId)
+					account = first;
+			})
+			.catch(() => {}); // no session to restore
 		return () => {
 			eth?.removeListener?.('chainChanged', onChain);
 			eth?.removeListener?.('accountsChanged', onAccounts);
