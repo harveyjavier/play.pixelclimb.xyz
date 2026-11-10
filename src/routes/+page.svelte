@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ConnectWallet from '#lib/connect-wallet.svelte';
+	import logo from '#lib/assets/logo.png';
 </script>
 
 <svelte:head>
@@ -12,7 +13,7 @@
 
 <main>
 	<nav>
-		<span class="title">Pixel Climb</span>
+		<span class="title"><img src={logo} alt="" width="26" height="26" />Pixel Climb</span>
 		<ConnectWallet />
 	</nav>
 	<!-- Solar2D HTML5 build in static/game (from scripts/game-web/build.sh in the landing repo). -->
@@ -42,6 +43,15 @@
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: #888;
+	}
+	.title {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		white-space: nowrap;
+	}
+	.title img {
+		image-rendering: pixelated; /* keep the pixel-art edges sharp when scaled down */
 	}
 	iframe {
 		aspect-ratio: 2 / 3; /* matches the Solar2D canvas (914x1371) */
