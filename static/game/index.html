@@ -88,16 +88,14 @@ k.p.toString(16)+", data=0x"+p.toString(16)))}return m};t.L=function(a){this.j=a
             dump(text + '\n'); // fast, straight to the real console
           } else {
             console.error(text);
-             if( typeof(text) === "string" && text.toUpperCase().indexOf("ERROR") >= 0) alert(text);
           }
         },
         canvas: (function() {
           var canvas = document.getElementById('canvas');
 
-          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-          // application robust, you may want to override this behavior before shipping!
+          // No alert(): it would block the parent play page that embeds this frame.
           // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+          canvas.addEventListener("webglcontextlost", function(e) { statusElement.textContent = 'WebGL context lost. Reload the page.'; console.error('WebGL context lost'); e.preventDefault(); }, false);
 
           return canvas;
         })(),
@@ -171,7 +169,7 @@ k.p.toString(16)+", data=0x"+p.toString(16)))}return m};t.L=function(a){this.j=a
 							    }
 						    }
 						    else {
-							    alert('Failed to load .bin file');
+							    statusElement.textContent = 'Failed to load the game. Reload the page.'; console.error('Failed to load .bin file');
 						    }
 						    break;
 				    }
