@@ -45,9 +45,9 @@
 	async function connect() {
 		const eth = ethereum();
 		if (!eth) {
-			// Mobile browsers never get window.ethereum; reopen this page inside the MetaMask app's browser.
+			// Mobile browsers never get window.ethereum; reopen this page in MetaMask's in-app browser (docs.metamask.io deeplinks).
 			if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-				location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}${location.search}`;
+				location.href = `https://link.metamask.io/dapp/${location.host}${location.pathname}${location.search}`;
 				return;
 			}
 			error = 'Install MetaMask first.';
