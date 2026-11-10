@@ -13,7 +13,7 @@
 {@render children()}
 
 <style>
-	/* Browser default 8px body margin pushed the 9:16 frame past the viewport height. */
+	/* Browser default 8px body margin pushed the 2:3 frame past the viewport height. */
 	:global(body) {
 		margin: 0;
 	}

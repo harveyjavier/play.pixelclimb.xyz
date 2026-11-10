@@ -1,6 +1,6 @@
 # PixelClimb
 
-A browser game served in a 9:16 page, with a MetaMask wallet that signs for a **NEAR testnet** account.
+A browser game served in a 2:3 frame (full screen on phones), with a MetaMask wallet that signs for a **NEAR testnet** account.
 
 Built for [NEAR HACKATHON](https://nearhackathon.com/) (1–14 Nov 2026), track **Games With Real Economies**.
 
@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-1. Open the URL Vite prints (usually http://localhost:5173). The game loads in the 9:16 frame.
+1. Open the URL Vite prints (usually http://localhost:5173). The game loads in the 2:3 frame.
 2. Click **Connect MetaMask** and approve the account request.
 3. Approve **Add network** / **Switch network**. MetaMask now shows _NEAR Protocol Testnet_, and the nav shows your `0x…` address.
 4. Click the address to open the account on testnet.nearblocks.io.
@@ -40,7 +40,7 @@ Checks: `pnpm check` (types) and `pnpm lint`.
 
 ## Project layout
 
-- `src/routes/+page.svelte`: the 9:16 game page and wallet nav
+- `src/routes/+page.svelte`: the 2:3 game page and wallet nav
 - `src/lib/connect-wallet.svelte`: MetaMask to NEAR testnet (chain 398)
 - `static/game/`: the game's Solar2D HTML5 build (compiled output, served as-is)
 
