@@ -50,7 +50,7 @@ Checks: `pnpm check` (types) and `pnpm lint`.
 - Submission: tag `hackathon-submission`.
 - Everything built in the hackathon: [`pre-hackathon...hackathon-submission`](../../compare/pre-hackathon...hackathon-submission).
 
-> TODO: say whether the Solar2D game in `static/game/` existed before 1 Nov 2026. If it did, list it as pre-existing; only the NEAR integration is judged.
+**Pre-existing work:** the Pixel Climb game itself (the Solar2D build in `static/game/`) existed before 1 Nov 2026. It is committed here as compiled output only. What was built during the hackathon is this web app: the play page and the NEAR testnet wallet integration.
 
 ## Credits
 
