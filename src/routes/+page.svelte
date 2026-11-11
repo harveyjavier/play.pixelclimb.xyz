@@ -1,6 +1,22 @@
 <script lang="ts">
 	import ConnectWallet from '#lib/connect-wallet.svelte';
 	import logo from '#lib/assets/logo.png';
+
+	let game = $state<HTMLIFrameElement>();
+
+	// Game over from the Solar2D build (pcbridge.js in the pixel-climb repo). The page may answer
+	// { type: 'pc:revive' } to continue the run or { type: 'pc:end' } to end it.
+	$effect(() => {
+		const onMessage = (e: MessageEvent) => {
+			if (e.origin !== location.origin || e.source !== game?.contentWindow) return;
+			const { type, floor, gems, durationMs } = e.data ?? {};
+			const counts = [floor, gems, durationMs];
+			if (type !== 'pc:gameover' || !counts.every((n) => Number.isSafeInteger(n) && n >= 0)) return;
+			console.info('[pixel-climb] game over', { floor, gems, durationMs });
+		};
+		addEventListener('message', onMessage);
+		return () => removeEventListener('message', onMessage);
+	});
 </script>
 
 <svelte:head>
@@ -17,7 +33,12 @@
 		<ConnectWallet />
 	</nav>
 	<!-- Solar2D HTML5 build in static/game (from scripts/game-web/build.sh in the landing repo). -->
-	<iframe src="/game/index.html" title="Pixel Climb game" allow="autoplay; fullscreen"></iframe>
+	<iframe
+		bind:this={game}
+		src="/game/index.html"
+		title="Pixel Climb game"
+		allow="autoplay; fullscreen"
+	></iframe>
 </main>
 
 <style>
