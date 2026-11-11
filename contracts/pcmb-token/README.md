@@ -12,6 +12,27 @@ The Pixel Climb token on NEAR: a NEP-141 fungible token with NEP-148 metadata. I
 | Supply   | 5,000,000, minted to the owner at deploy                                                 |
 | Minting  | The owner can mint more with `mint`                                                      |
 
+## Use it in MetaMask
+
+The play page connects MetaMask to NEAR testnet (chain 398). NEAR shows NEP-141 tokens to MetaMask as ERC-20 tokens, so PCMB works there like any other token.
+
+| Field            | Value                                        |
+| ---------------- | -------------------------------------------- |
+| Network          | NEAR Protocol Testnet, chain ID `398`        |
+| RPC              | `https://eth-rpc.testnet.near.org`           |
+| Token address    | `0x937ca2395d64855e08c74c30947a545eef6c1bf1` |
+| Symbol, decimals | PCMB, 9                                      |
+
+In MetaMask, on NEAR Protocol Testnet, choose **Import tokens** and paste the token address.
+
+The address is the last 20 bytes of `keccak256("pcmb.pixelclimb.testnet")`. It only resolves because the token is registered in NEAR's address registry (`address-map.near` on testnet). A new token account needs the same one-time call:
+
+```sh
+near contract call-function as-transaction address-map.near register json-args '{"account_id":"<token-account>"}'   prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <any-account> network-config testnet sign-with-legacy-keychain send
+```
+
+MetaMask can show balances and send PCMB. It cannot call `mint`; that needs the owner's NEAR key.
+
 ## Check it
 
 ```sh

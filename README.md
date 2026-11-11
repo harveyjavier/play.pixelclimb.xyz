@@ -23,7 +23,7 @@ The player's `0x…` address is their NEAR account, so players use the wallet th
 
 ### Economy
 
-The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token). In this repo the wallet is connected but no transactions are sent yet. Rewarding gems and floors in $PCMB is the next step.
+The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. MetaMask shows it as a normal token at `0x937ca2395d64855e08c74c30947a545eef6c1bf1` on NEAR Protocol Testnet. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token). In this repo the wallet is connected but no transactions are sent yet. Rewarding gems and floors in $PCMB is the next step.
 
 ## Try it (judges)
 
