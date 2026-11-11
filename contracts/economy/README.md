@@ -60,16 +60,16 @@ Requirements: [near-cli-rs](https://github.com/near/near-cli-rs), with keys in t
 Set these first:
 
 ```sh
-OWNER=<team>.testnet          # owns the contract and the first pool's $PCMB
+OWNER=pixelclimb.testnet      # owns the contract and holds the $PCMB supply
 ECONOMY=economy.$OWNER
-SERVER=<game-server>.testnet  # the play page's server key (#9)
-TOKEN=<pcmb-token>.testnet    # the $PCMB contract from #5
+SERVER=$OWNER                 # until the play page's server key exists (#9); then `set_server`
+TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
 ```
 
-1. Create the contract account:
+1. Create the contract account. The wasm is about 160 KB, which locks about 1.6 NEAR for storage:
 
    ```sh
-   near account create-account fund-myself $ECONOMY '5 NEAR' autogenerate-new-keypair save-to-keychain sign-as $OWNER network-config testnet sign-with-keychain send
+   near account create-account fund-myself $ECONOMY '3 NEAR' autogenerate-new-keypair save-to-keychain sign-as $OWNER network-config testnet sign-with-keychain send
    ```
 
 2. Deploy and initialize with the demo settings:
