@@ -23,7 +23,7 @@ The player's `0x…` address is their NEAR account, so players use the wallet th
 
 ### Economy
 
-The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet that also serves as the governance token. In this repo the wallet is connected but no transactions are sent yet. Rewarding gems and floors in $PCMB is the next step.
+The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token). In this repo the wallet is connected but no transactions are sent yet. Rewarding gems and floors in $PCMB is the next step.
 
 ## Try it (judges)
 
@@ -48,6 +48,7 @@ Checks: `pnpm check` (types) and `pnpm lint`.
 - `src/routes/+page.svelte`: the 2:3 game page and wallet nav
 - `src/lib/connect-wallet.svelte`: MetaMask to NEAR testnet (chain 398)
 - `static/game/`: the game's Solar2D HTML5 build (compiled output, served as-is)
+- `contracts/pcmb-token/`: the $PCMB token contract (Rust, NEP-141)
 
 ## Built during the hackathon
 
