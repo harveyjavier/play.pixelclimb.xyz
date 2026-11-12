@@ -23,7 +23,15 @@ The player's `0x…` address is their NEAR account, so players use the wallet th
 
 ### Economy
 
-The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. MetaMask shows it as a normal token at `0x937ca2395d64855e08c74c30947a545eef6c1bf1` on NEAR Protocol Testnet. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token). In this repo the wallet is connected but no transactions are sent yet. Rewarding gems and floors in $PCMB is the next step.
+The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. MetaMask shows it as a normal token at `0x937ca2395d64855e08c74c30947a545eef6c1bf1` on NEAR Protocol Testnet. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token).
+
+The game economy runs in a second contract at [`economy.pixelclimb.testnet`](https://testnet.nearblocks.io/address/economy.pixelclimb.testnet), with the code in [`contracts/economy`](contracts/economy):
+
+- **Earn.** Each round has a prize pool of $PCMB. When the round ends, the pool is split among players by their best floor.
+- **Spend.** A gem (a revive) costs $PCMB. The price rises 5% with each purchase and drops 1% a minute when nobody buys.
+- **Recycle.** Every $PCMB spent on gems goes into the next round's pool.
+
+The first pool holds 10,000 $PCMB. The play page does not call the economy contract yet: the wallet connects, but no transactions are sent. Wiring runs and revives to it is the next step.
 
 ## Try it (judges)
 
@@ -49,6 +57,7 @@ Checks: `pnpm check` (types) and `pnpm lint`.
 - `src/lib/connect-wallet.svelte`: MetaMask to NEAR testnet (chain 398)
 - `static/game/`: the game's Solar2D HTML5 build (compiled output, served as-is)
 - `contracts/pcmb-token/`: the $PCMB token contract (Rust, NEP-141)
+- `contracts/economy/`: the economy contract (Rust): prize pool, runs and gem shop
 
 ## Built during the hackathon
 
