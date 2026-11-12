@@ -325,7 +325,8 @@ impl Economy {
         self.players.insert(player.clone(), account);
         ext_storage_management::ext(self.token.clone())
             .with_attached_deposit(STORAGE_DEPOSIT)
-            .with_static_gas(Gas::from_tgas(5))
+            // 10 Tgas: the token also schedules a refund when the account is already registered.
+            .with_static_gas(Gas::from_tgas(10))
             .storage_deposit(Some(player.clone()), Some(true))
             .then(
                 ext_ft_core::ext(self.token.clone())

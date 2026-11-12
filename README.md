@@ -41,17 +41,17 @@ The game economy runs in a second contract at [`economy.pixelclimb.testnet`](htt
 
 The first pool holds 10,000 $PCMB.
 
-### Your wallet is your account
+### Play first, connect a wallet to claim
 
-The connected MetaMask address is the player's account: runs, payouts and revives all go to it. NEAR takes the lowercase `0x…` address as an account id ([NEP-518](https://github.com/near/NEPs/issues/518)). Without a wallet you can play, but runs aren't saved and nothing is earned.
+A new visitor earns with no wallet. On a player's first visit the page makes an ed25519 key in the browser (`localStorage`). Its public key, in hex, is a NEAR account (an [implicit account](https://docs.near.org/protocol/account-id#implicit-address)), and runs, payouts and revives go to that browser account.
 
-MetaMask only asks once. On a player's first visit the page makes an ed25519 key in the browser (`localStorage`), and on connect the wallet signs a message that lets this key play for it (`personal_sign`). After that the page signs each request with the browser key and sends the wallet's signature along, so a run or a revive never opens MetaMask. The code is in [`src/lib/player.ts`](src/lib/player.ts) and [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
+Connecting MetaMask makes the wallet the player's account. NEAR takes the lowercase `0x…` address as an account id ([NEP-518](https://github.com/near/NEPs/issues/518)). On connect the wallet signs one message that lets this browser's key play for it (`personal_sign`), and everything the browser account earned so far (balance, gems, this round's best floor) moves to the wallet. From then on runs, payouts and revives go to the wallet, and **Withdraw** sends the balance to it. MetaMask only asks once: the page signs each request with the browser key and sends the wallet's signature along, so a run or a revive never opens MetaMask. The code is in [`src/lib/player.ts`](src/lib/player.ts) and [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
 
-The game server sends every transaction and pays the fees. The economy contract lets the `server` account record runs, buy gems, move a browser account's earnings to its wallet and withdraw to a player's own wallet, so players never sign a NEAR transaction. Before relaying, the server checks the browser key's signature and that the wallet itself signed the link. A signed request expires after a minute and can be used once.
+The game server sends every transaction and pays the fees. The economy contract lets the `server` account record runs, buy gems, move a browser account's earnings to its wallet and withdraw to a player's own wallet, so players never sign a NEAR transaction. Before relaying, the server checks the browser key's signature and, when the request names a wallet, that the wallet itself signed the link. A request that names no wallet acts on the browser account. A signed request expires after a minute and can be used once.
 
 | Endpoint             | What it does                                                                                                                                                                                                                                     |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/state`     | Round, pool, time left and gem price. With `?player=` (a wallet), also that player's best floor, balance and gems                                                                                                                                |
+| `GET /api/state`     | Round, pool, time left and gem price. With `?player=` (a wallet or a browser account), also that player's best floor, balance and gems                                                                                                           |
 | `POST /api/link`     | Signed, after the wallet signs the link. Calls `merge_player` to move anything the browser account earned before (balance, gems, this round's best floor) to the wallet; skipped when there is nothing to move                                   |
 | `POST /api/withdraw` | Signed. Calls `withdraw_for` to send the wallet's whole balance to the wallet, so it shows in MetaMask and on NearBlocks. The contract registers the wallet on the token first (0.00125 NEAR from the economy account)                           |
 | `POST /api/run`      | Signed. Rejects a floor that can't be reached in the run's time (more than 1 floor a second, runs up to an hour). Pays out the round if it has ended, then calls `record_run` when the floor is at least the minimum and beats the player's best |
@@ -62,10 +62,12 @@ When a run ends, the game sends `pc:gameover` with an `id`, the floor, gems and 
 
 Known limits:
 
-- The run's duration comes from the browser, so the check stops impossible runs, not someone who sends a made-up but possible one. Nothing stops one person from playing with several wallets either, and each saved run costs the server gas.
+- The run's duration comes from the browser, so the check stops impossible runs, not someone who sends a made-up but possible one. Nothing stops one person from playing with several browsers or wallets either, and each saved run costs the server gas.
 - Copies of one request sent at the same moment to different server instances can both get through; a shared store would close that.
 - Winnings stay in the economy contract as an in-game balance until the player clicks **Withdraw**, so revives can be paid without a popup.
-- The link signature is saved per browser. A new browser or device asks MetaMask to sign once more; the balance stays with the wallet.
+- Until a wallet is connected, a balance belongs to the key in the browser's `localStorage`. Clearing site data, or switching browser or device, loses it. Connecting a wallet moves it to the wallet for good.
+- The link signature is saved per browser. A new browser or device asks MetaMask to sign once more; the balance stays with the wallet. The signature does not expire and can't be revoked; with it and the browser key someone could spend the wallet's game balance on gems, but not withdraw it anywhere else.
+- The game server's key can move any player's game balance (`merge_player`), so it has custody of balances that have not been withdrawn. It is a function-call key limited to the economy contract, kept only in the server's environment.
 - Each first withdrawal to a new wallet costs the economy account 0.00125 NEAR for token storage. Keep it topped up.
 
 ### Rebuilding the game
@@ -109,9 +111,9 @@ pnpm dev
 ```
 
 1. Open the URL Vite prints (usually http://localhost:5173). The game loads in the 2:3 frame.
-2. Click **Connect Wallet** and approve the account request.
-3. Approve **Add network** / **Switch network**, then sign the message that lets this browser play for your wallet. MetaMask now shows _NEAR Protocol Testnet_, and the nav shows your `0x…` address.
-4. Play past the minimum floor. When the round ends your share shows next to the round, under your address. Click **Withdraw** to send it to your wallet; it then shows in MetaMask and on NearBlocks.
+2. Play past the minimum floor, with no wallet. The game-over panel says the run is saved, and when the round ends your share shows in the bar above the game.
+3. Click **Connect Wallet** and approve the account request, then **Add network** / **Switch network**, then sign the message that lets this browser play for your wallet. MetaMask now shows _NEAR Protocol Testnet_, the nav shows your `0x…` address, and the balance you earned is now the wallet's.
+4. Click **Withdraw** to send it to your wallet; it then shows in MetaMask and on NearBlocks.
 5. Click the address to open the account on testnet.nearblocks.io.
 6. Reload the page. You stay connected, and MetaMask doesn't ask again.
 7. In MetaMask, switch to any other network; the app disconnects. Click **Disconnect** to revoke the site's access.

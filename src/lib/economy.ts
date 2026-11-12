@@ -25,7 +25,8 @@ export type StateResponse = { state: EconomyState; player: PlayerState | null };
 /**
  * What the page signs. `ts` is the page's clock in ms, so a captured request stops working soon.
  * `player` is the browser key's account. `wallet` and `link` (the wallet's signature of
- * `linkMessage`) say which wallet that key plays for; earning needs them.
+ * `linkMessage`) say which wallet that key plays for. Without them the browser account plays and
+ * earns for itself; linking and withdrawing need them.
  */
 type Signed = { player: string; ts: number; wallet?: string; link?: string };
 export type SignedPayload = Signed &
@@ -82,6 +83,16 @@ export function recoverWallet(message: string, signature: string): string | null
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * The wallet a signed request plays for. `null` when it names none (the browser account plays for
+ * itself), and `'invalid'` when the link is not that wallet's signature for this browser key.
+ */
+export function linkedWallet({ player, wallet, link }: SignedPayload): string | null | 'invalid' {
+	if (wallet === undefined && link === undefined) return null;
+	if (!isWallet(wallet) || typeof link !== 'string') return 'invalid';
+	return recoverWallet(linkMessage(player, wallet), link) === wallet ? wallet : 'invalid';
 }
 
 const isCount = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;

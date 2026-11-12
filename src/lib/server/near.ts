@@ -16,9 +16,7 @@ import {
 } from 'near-api-js';
 import {
 	MAX_REQUEST_AGE_MS,
-	isWallet,
-	linkMessage,
-	recoverWallet,
+	linkedWallet,
 	type EconomyState,
 	type PlayerState,
 	type SignedPayload
@@ -110,9 +108,19 @@ export function useOnce(signature: string) {
 }
 
 /** The wallet a request plays for. Only a link that the wallet itself signed counts. */
-export function walletOf({ player, wallet, link }: SignedPayload): string {
-	if (!isWallet(wallet) || typeof link !== 'string') error(403, 'Connect a wallet to earn');
-	if (recoverWallet(linkMessage(player, wallet), link) !== wallet)
-		error(403, 'Wallet link is not valid, connect again');
+export function walletOf(req: SignedPayload): string {
+	const wallet = linkedWallet(req);
+	if (wallet === null) error(403, 'Connect a wallet first');
+	if (wallet === 'invalid') error(403, 'Wallet link is not valid, connect again');
 	return wallet;
+}
+
+/**
+ * Whose balance a run or a revive uses: the linked wallet, or the browser account when the request
+ * names no wallet. A new visitor earns with no wallet, and `/api/link` moves it over on connect.
+ */
+export function accountOf(req: SignedPayload): string {
+	const wallet = linkedWallet(req);
+	if (wallet === 'invalid') error(403, 'Wallet link is not valid, connect again');
+	return wallet ?? req.player;
 }

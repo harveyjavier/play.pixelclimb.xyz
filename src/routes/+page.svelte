@@ -2,10 +2,10 @@
 	import ConnectWallet from '#lib/connect-wallet.svelte';
 	import logo from '#lib/assets/logo.png';
 	import { formatPcmb, type StateResponse } from '#lib/economy.ts';
-	import { signedPost } from '#lib/player.ts';
+	import { playerId, signedPost } from '#lib/player.ts';
 
 	let game = $state<HTMLIFrameElement>();
-	/** The linked wallet: runs, payouts and revives use it. Without one, nothing is saved. */
+	/** The linked wallet: runs, payouts and revives use it. Without one, this browser's own account earns. */
 	let wallet = $state<string | null>(null);
 	let withdrawing = $state(false);
 	let withdrawError = $state('');
@@ -39,7 +39,8 @@
 	async function refresh() {
 		const seq = ++latest;
 		// Reads `wallet` synchronously, so the effect below reloads when a wallet links or leaves.
-		const res = await fetch(`/api/state${wallet ? `?player=${wallet}` : ''}`).catch(() => null);
+		// Without a wallet, the browser account's own balance shows.
+		const res = await fetch(`/api/state?player=${wallet ?? playerId()}`).catch(() => null);
 		const data = res?.ok ? await res.json() : undefined;
 		if (data && seq === latest) economy = data;
 	}
@@ -127,9 +128,8 @@
 		const counts = [floor, gems, durationMs];
 		if (type !== 'pc:gameover' || !counts.every((n) => Number.isSafeInteger(n) && n >= 0)) return;
 		if (id !== undefined && !Number.isSafeInteger(id)) return; // builds before pixel-climb#1 send no id
-		const note = wallet ? 'Saving run…' : 'Connect a wallet to save runs and earn $PCMB';
-		over = { id, floor, note, saving: !!wallet, busy: false, error: '' };
-		if (wallet) submitRun(over, durationMs);
+		over = { id, floor, note: 'Saving run…', saving: true, busy: false, error: '' };
+		submitRun(over, durationMs);
 	}
 
 	const clock = (ms: number) => {
@@ -164,22 +164,22 @@
 					? `${clock(leftMs)} left`
 					: 'Paying out…'} · Best {player?.best_floor ?? 0}
 			</span>
-			{#if !wallet}
-				<span class="balance">Connect a wallet to earn</span>
-			{:else}
-				<span class="balance"
-					>{formatPcmb(player?.balance ?? '0')} $PCMB · {gems}
-					{gems === 1 ? 'gem' : 'gems'}
-					{#if player && player.balance !== '0'}
+			<span class="balance"
+				>{formatPcmb(player?.balance ?? '0')} $PCMB · {gems}
+				{gems === 1 ? 'gem' : 'gems'}
+				{#if player && player.balance !== '0'}
+					{#if wallet}
 						· <button type="button" class="withdraw" onclick={withdraw} disabled={withdrawing}
 							>{withdrawing ? 'Sending…' : 'Withdraw'}</button
 						>
+					{:else}
+						· Connect a wallet to withdraw
 					{/if}
-					{#if withdrawError}
-						<span role="alert" class="error" title={withdrawError}>{withdrawError}</span>
-					{/if}
-				</span>
-			{/if}
+				{/if}
+				{#if withdrawError}
+					<span role="alert" class="error" title={withdrawError}>{withdrawError}</span>
+				{/if}
+			</span>
 		{:else}
 			<span>Loading round…</span>
 		{/if}
@@ -209,7 +209,7 @@
 						? 'Reviving…'
 						: `Revive for ${formatPcmb(economy?.state.gem_price ?? '0')} $PCMB`}
 				</button>
-				{#if wallet && !canRevive && !over.busy && !over.saving}
+				{#if !canRevive && !over.busy && !over.saving}
 					<p class="hint">Not enough $PCMB yet. Earn it by placing in a round.</p>
 				{/if}
 				{#if over.error}

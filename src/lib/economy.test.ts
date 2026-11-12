@@ -9,6 +9,7 @@ import {
 	isPlausibleRun,
 	isWallet,
 	linkMessage,
+	linkedWallet,
 	recoverWallet,
 	verifyRequest,
 	type SignedPayload
@@ -112,4 +113,21 @@ test('wallets are lowercase 0x addresses', () => {
 	assert.ok(isWallet(walletAddress));
 	assert.ok(!isWallet(walletAddress.toUpperCase().replace('0X', '0x')));
 	assert.ok(!isWallet(player));
+});
+
+test('a request names no wallet, its own wallet, or an invalid one', () => {
+	const base = { ...run } as SignedPayload;
+	const link = personalSign(linkMessage(player, walletAddress));
+	// No wallet: the browser account plays for itself.
+	assert.equal(linkedWallet(base), null);
+	// The wallet signed the link for this browser key.
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress, link }), walletAddress);
+	// A link the wallet signed for another browser key does not count for this one.
+	const other = keyToImplicitAddress(KeyPair.fromRandom('ed25519').getPublicKey());
+	const otherLink = personalSign(linkMessage(other, walletAddress));
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress, link: otherLink }), 'invalid');
+	// Half a link, or another address, is refused instead of falling back to the browser account.
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress }), 'invalid');
+	assert.equal(linkedWallet({ ...base, link }), 'invalid');
+	assert.equal(linkedWallet({ ...base, wallet: `0x${'1'.repeat(40)}`, link }), 'invalid');
 });

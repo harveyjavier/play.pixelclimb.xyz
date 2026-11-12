@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	useOnce(body.signature);
 	const { balance } = await getPlayer(wallet);
 	if (balance === '0') error(402, 'Nothing to withdraw');
-	// storage_deposit, ft_transfer and the callback: 5 + 10 + 5 Tgas, plus this call's own work.
+	// storage_deposit, ft_transfer and the callback: 10 + 10 + 5 Tgas, plus this call's own work.
 	await call('withdraw_for', { player: wallet, amount: balance }, 50);
 	return Response.json({ withdrawn: balance });
 };
