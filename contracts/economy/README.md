@@ -115,4 +115,4 @@ TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
    near contract call-function as-read-only $ECONOMY get_state json-args '{}' network-config testnet now
    ```
 
-Players need `storage_deposit` on the token before they can `withdraw`. The play page's server handles this (#9).
+Players need `storage_deposit` on the token before they can `withdraw`. The play page doesn't offer withdrawals yet. The game server account and its key are set up as described in the [root README](../../README.md#game-server-setup).

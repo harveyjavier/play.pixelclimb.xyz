@@ -34,6 +34,16 @@ export default defineConfig(
 		}
 	},
 	{
+		// .svelte files get type information from the block above; .ts files need it for the rule below.
+		files: ['**/*.ts'],
+		languageOptions: { parserOptions: { projectService: true } }
+	},
+	{
+		// Flags deprecated APIs, e.g. SvelteKit's `json` (now `Response.json`).
+		files: ['**/*.ts', '**/*.svelte'],
+		rules: { '@typescript-eslint/no-deprecated': 'error' }
+	},
+	{
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}
