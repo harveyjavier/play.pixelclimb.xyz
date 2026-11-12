@@ -390,6 +390,76 @@ fn withdraw_zero_rejected() {
     let _ = c.withdraw(U128(0));
 }
 
+#[test]
+fn server_can_withdraw_for_a_player() {
+    let mut c = setup();
+    deposit(&mut c, alice(), 30 * PCMB);
+    at(0, server());
+    let _ = c.withdraw_for(alice(), U128(30 * PCMB));
+    assert_eq!(c.get_player(alice()).balance, U128(0));
+}
+
+#[test]
+#[should_panic(expected = "Only the game server can do this")]
+fn withdraw_for_is_server_only() {
+    let mut c = setup();
+    deposit(&mut c, alice(), 30 * PCMB);
+    at(0, bob());
+    let _ = c.withdraw_for(alice(), U128(30 * PCMB));
+}
+
+// ---------- linking a browser account to a wallet ----------
+
+#[test]
+fn merge_moves_balance_gems_and_best_floor() {
+    let mut c = setup();
+    deposit(&mut c, alice(), 30 * PCMB);
+    at(0, alice());
+    c.buy_gem(alice());
+    deposit(&mut c, bob(), 5 * PCMB);
+    at(1, server());
+    c.record_run(alice(), 14);
+    c.record_run(bob(), 11);
+    c.merge_player(alice(), bob());
+
+    let bob_now = c.get_player(bob());
+    assert_eq!(bob_now.balance, U128(25 * PCMB)); // 30 - 10 for the gem + 5
+    assert_eq!(bob_now.gems, 1);
+    assert_eq!(bob_now.best_floor, 14);
+    let alice_now = c.get_player(alice());
+    assert_eq!(
+        (alice_now.balance, alice_now.gems, alice_now.best_floor),
+        (U128(0), 0, 0)
+    );
+    assert_eq!(c.get_state().players_this_round, 1);
+}
+
+#[test]
+fn merge_keeps_the_higher_floor() {
+    let mut c = setup();
+    at(1, server());
+    c.record_run(alice(), 11);
+    c.record_run(bob(), 20);
+    c.merge_player(alice(), bob());
+    assert_eq!(c.get_player(bob()).best_floor, 20);
+}
+
+#[test]
+#[should_panic(expected = "Only the game server can do this")]
+fn merge_is_server_only() {
+    let mut c = setup();
+    at(0, alice());
+    c.merge_player(alice(), bob());
+}
+
+#[test]
+#[should_panic(expected = "Can't merge a player into itself")]
+fn merge_into_itself_rejected() {
+    let mut c = setup();
+    at(0, server());
+    c.merge_player(alice(), alice());
+}
+
 // ---------- owner settings ----------
 
 #[test]

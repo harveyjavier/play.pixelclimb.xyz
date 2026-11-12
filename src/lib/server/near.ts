@@ -14,7 +14,15 @@ import {
 	teraToGas,
 	type KeyPairString
 } from 'near-api-js';
-import { MAX_REQUEST_AGE_MS, type EconomyState, type PlayerState } from '#lib/economy.ts';
+import {
+	MAX_REQUEST_AGE_MS,
+	isWallet,
+	linkMessage,
+	recoverWallet,
+	type EconomyState,
+	type PlayerState,
+	type SignedPayload
+} from '#lib/economy.ts';
 
 const ECONOMY = ECONOMY_CONTRACT;
 const provider = new JsonRpcProvider({ url: NEAR_RPC_URL });
@@ -99,4 +107,12 @@ export function useOnce(signature: string) {
 	for (const [sig, at] of used) if (now - at > MAX_REQUEST_AGE_MS) used.delete(sig);
 	if (used.has(signature)) error(409, 'This request was already used');
 	used.set(signature, now);
+}
+
+/** The wallet a request plays for. Only a link that the wallet itself signed counts. */
+export function walletOf({ player, wallet, link }: SignedPayload): string {
+	if (!isWallet(wallet) || typeof link !== 'string') error(403, 'Connect a wallet to earn');
+	if (recoverWallet(linkMessage(player, wallet), link) !== wallet)
+		error(403, 'Wallet link is not valid, connect again');
+	return wallet;
 }

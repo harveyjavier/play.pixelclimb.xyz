@@ -38,6 +38,8 @@
 		"vite": "^8.3.0"
 	},
 	"dependencies": {
+		"@noble/curves": "2.2.0",
+		"@noble/hashes": "2.2.0",
 		"near-api-js": "7.4.0"
 	},
 	"engines": {

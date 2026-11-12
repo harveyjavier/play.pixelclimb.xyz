@@ -1,5 +1,8 @@
 // Shared by the page and the /api routes: what the economy contract returns, how a run is checked,
 // and how the page signs its requests with the player's browser key.
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { KeyType, PublicKey, base64Decode } from 'near-api-js';
 
 /** `get_state` on the economy contract. Amounts are raw $PCMB (9 decimals). */
@@ -19,10 +22,19 @@ export type PlayerState = { best_floor: number; balance: string; gems: number };
 /** Response of `GET /api/state`. */
 export type StateResponse = { state: EconomyState; player: PlayerState | null };
 
-/** What the page signs. `ts` is the page's clock in ms, so a captured request stops working soon. */
-export type SignedPayload =
-	| { action: 'run'; player: string; ts: number; floor: number; durationMs: number }
-	| { action: 'revive'; player: string; ts: number; gems: number };
+/**
+ * What the page signs. `ts` is the page's clock in ms, so a captured request stops working soon.
+ * `player` is the browser key's account. `wallet` and `link` (the wallet's signature of
+ * `linkMessage`) say which wallet that key plays for; earning needs them.
+ */
+type Signed = { player: string; ts: number; wallet?: string; link?: string };
+export type SignedPayload = Signed &
+	(
+		| { action: 'run'; floor: number; durationMs: number }
+		| { action: 'revive'; gems: number }
+		| { action: 'link' }
+		| { action: 'withdraw' }
+	);
 
 /** Body of `POST /api/run` and `POST /api/revive`: the payload as signed text, and its base64 signature. */
 export type SignedRequest = { payload: string; signature: string };
@@ -44,6 +56,33 @@ const MAX_FLOOR = 2 ** 32 - 1;
 /** A player's account is the hex of their browser key's public key (a NEAR implicit account). */
 export const isPlayerId = (id: unknown): id is string =>
 	typeof id === 'string' && /^[0-9a-f]{64}$/.test(id);
+
+/** A MetaMask address in lowercase, which NEAR also takes as an account id (NEP-518). */
+export const isWallet = (id: unknown): id is string =>
+	typeof id === 'string' && /^0x[0-9a-f]{40}$/.test(id);
+
+/** The text a wallet signs (personal_sign) once, to let a browser key play and earn for it. */
+export const linkMessage = (player: string, wallet: string) =>
+	`Pixel Climb: let this browser (${player}) play and earn for ${wallet}.`;
+
+/** The address that made `signature` (0x hex, r s v) over `message` with personal_sign (EIP-191). */
+export function recoverWallet(message: string, signature: string): string | null {
+	try {
+		const text = new TextEncoder().encode(message);
+		const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${text.length}`);
+		const hash = keccak_256(new Uint8Array([...prefix, ...text]));
+		const sig = hexToBytes(signature.replace(/^0x/, ''));
+		if (sig.length !== 65) return null;
+		const v = sig[64] >= 27 ? sig[64] - 27 : sig[64];
+		// noble's 'recovered' format puts the recovery byte first; Ethereum puts it last.
+		const recovered = new Uint8Array([v, ...sig.subarray(0, 64)]);
+		const pub = secp256k1.recoverPublicKey(recovered, hash, { prehash: false });
+		const point = secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1);
+		return '0x' + bytesToHex(keccak_256(point).subarray(12));
+	} catch {
+		return null;
+	}
+}
 
 const isCount = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
 

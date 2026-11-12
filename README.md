@@ -41,27 +41,32 @@ The game economy runs in a second contract at [`economy.pixelclimb.testnet`](htt
 
 The first pool holds 10,000 $PCMB.
 
-### Playing without a wallet
+### Your wallet is your account
 
-On a player's first visit, the page makes an ed25519 key in the browser (`localStorage`). Its public key, in hex, is the player's NEAR account (an [implicit account](https://docs.near.org/protocol/accounts-contracts/account-id#implicit-address)), so nothing has to be created on-chain. The code is in [`src/lib/player.ts`](src/lib/player.ts).
+The connected MetaMask address is the player's account: runs, payouts and revives all go to it. NEAR takes the lowercase `0x…` address as an account id ([NEP-518](https://github.com/near/NEPs/issues/518)). Without a wallet you can play, but runs aren't saved and nothing is earned.
 
-The game server sends every transaction and pays the fees. The economy contract lets the `server` account record runs and buy gems for any player, so players never sign a transaction. To stop one player spending another's balance, the page signs each request with the player's key, and the server checks it before relaying. A signed request expires after a minute and can be used once.
+MetaMask only asks once. On a player's first visit the page makes an ed25519 key in the browser (`localStorage`), and on connect the wallet signs a message that lets this key play for it (`personal_sign`). After that the page signs each request with the browser key and sends the wallet's signature along, so a run or a revive never opens MetaMask. The code is in [`src/lib/player.ts`](src/lib/player.ts) and [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
 
-| Endpoint           | What it does                                                                                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/state`   | Round, pool, time left and gem price. With `?player=`, also that player's best floor, balance and gems                                                                                                                                           |
-| `POST /api/run`    | Signed. Rejects a floor that can't be reached in the run's time (more than 1 floor a second, runs up to an hour). Pays out the round if it has ended, then calls `record_run` when the floor is at least the minimum and beats the player's best |
-| `POST /api/revive` | Signed, with the gem count the page saw, so a copied request stops working after one purchase. Calls `buy_gem`; the page then tells the game to continue the run                                                                                 |
-| `POST /api/settle` | Pays out the round if it has ended. Each open page calls it at a random moment in the 10 seconds after the countdown ends, so winnings show without waiting for someone's next run                                                               |
+The game server sends every transaction and pays the fees. The economy contract lets the `server` account record runs, buy gems, move a browser account's earnings to its wallet and withdraw to a player's own wallet, so players never sign a NEAR transaction. Before relaying, the server checks the browser key's signature and that the wallet itself signed the link. A signed request expires after a minute and can be used once.
+
+| Endpoint             | What it does                                                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/state`     | Round, pool, time left and gem price. With `?player=` (a wallet), also that player's best floor, balance and gems                                                                                                                                |
+| `POST /api/link`     | Signed, after the wallet signs the link. Calls `merge_player` to move anything the browser account earned before (balance, gems, this round's best floor) to the wallet; skipped when there is nothing to move                                   |
+| `POST /api/withdraw` | Signed. Calls `withdraw_for` to send the wallet's whole balance to the wallet, so it shows in MetaMask and on NearBlocks. The contract registers the wallet on the token first (0.00125 NEAR from the economy account)                           |
+| `POST /api/run`      | Signed. Rejects a floor that can't be reached in the run's time (more than 1 floor a second, runs up to an hour). Pays out the round if it has ended, then calls `record_run` when the floor is at least the minimum and beats the player's best |
+| `POST /api/revive`   | Signed, with the gem count the page saw, so a copied request stops working after one purchase. Calls `buy_gem`; the page then tells the game to continue the run                                                                                 |
+| `POST /api/settle`   | Pays out the round if it has ended. Each open page calls it at a random moment in the 10 seconds after the countdown ends, so winnings show without waiting for someone's next run                                                               |
 
 When a run ends, the game sends `pc:gameover` with an `id`, the floor, gems and duration ([pixel-climb#1](https://github.com/hsjtechnologies/pixel-climb/pull/1)). The page saves the run and offers **Revive for N $PCMB** or **End run**, then replies `pc:revive` or `pc:end` with the same `id`.
 
 Known limits:
 
-- The run's duration comes from the browser, so the check stops impossible runs, not someone who sends a made-up but possible one. Nothing stops one person from playing with several browser keys either, and each saved run costs the server gas.
+- The run's duration comes from the browser, so the check stops impossible runs, not someone who sends a made-up but possible one. Nothing stops one person from playing with several wallets either, and each saved run costs the server gas.
 - Copies of one request sent at the same moment to different server instances can both get through; a shared store would close that.
-- Winnings stay in the economy contract as an in-game balance. The page has no withdraw button yet, so they don't show in a wallet.
-- A player's balance belongs to the key in their browser's `localStorage`. Clearing site data, or switching browser or device, loses it, since there is no export or withdraw yet.
+- Winnings stay in the economy contract as an in-game balance until the player clicks **Withdraw**, so revives can be paid without a popup.
+- The link signature is saved per browser. A new browser or device asks MetaMask to sign once more; the balance stays with the wallet.
+- Each first withdrawal to a new wallet costs the economy account 0.00125 NEAR for token storage. Keep it topped up.
 
 ### Rebuilding the game
 
@@ -87,7 +92,7 @@ ECONOMY=economy.$OWNER
 SERVER=server.$OWNER
 
 near account create-account fund-myself $SERVER '1 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as $OWNER network-config testnet sign-with-legacy-keychain send
-near account add-key $SERVER grant-function-call-access --allowance unlimited --contract-account-id $ECONOMY --function-names 'record_run, buy_gem, settle_round' autogenerate-new-keypair save-to-legacy-keychain network-config testnet sign-with-legacy-keychain send
+near account add-key $SERVER grant-function-call-access --allowance unlimited --contract-account-id $ECONOMY --function-names 'record_run, buy_gem, settle_round, merge_player, withdraw_for' autogenerate-new-keypair save-to-legacy-keychain network-config testnet sign-with-legacy-keychain send
 near contract call-function as-transaction $ECONOMY set_server json-args "{\"server\":\"$SERVER\"}" prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
 ```
 
@@ -104,20 +109,21 @@ pnpm dev
 ```
 
 1. Open the URL Vite prints (usually http://localhost:5173). The game loads in the 2:3 frame.
-2. Click **Connect MetaMask** and approve the account request.
-3. Approve **Add network** / **Switch network**. MetaMask now shows _NEAR Protocol Testnet_, and the nav shows your `0x…` address.
-4. Click the address to open the account on testnet.nearblocks.io.
-5. Reload the page. You stay connected.
-6. In MetaMask, switch to any other network; the app disconnects. Click **Disconnect** to revoke the site's access.
+2. Click **Connect Wallet** and approve the account request.
+3. Approve **Add network** / **Switch network**, then sign the message that lets this browser play for your wallet. MetaMask now shows _NEAR Protocol Testnet_, and the nav shows your `0x…` address.
+4. Play past the minimum floor. When the round ends your share shows next to the round, under your address. Click **Withdraw** to send it to your wallet; it then shows in MetaMask and on NearBlocks.
+5. Click the address to open the account on testnet.nearblocks.io.
+6. Reload the page. You stay connected, and MetaMask doesn't ask again.
+7. In MetaMask, switch to any other network; the app disconnects. Click **Disconnect** to revoke the site's access.
 
-Checks: `pnpm check` (types), `pnpm lint` and `pnpm test` (request signing and the run check).
+Checks: `pnpm check` (types), `pnpm lint` and `pnpm test` (request signing, the wallet link and the run check).
 
 ## Project layout
 
 - `src/routes/+page.svelte`: the 2:3 game page, wallet nav, round and balance bar, and the game-over panel
-- `src/routes/api/`: the game server endpoints (`state`, `run`, `revive`, `settle`)
+- `src/routes/api/`: the game server endpoints (`state`, `run`, `revive`, `settle`, `link`, `withdraw`)
 - `src/lib/economy.ts`: shared by page and server: contract types, the run check and request signing
-- `src/lib/player.ts`: the player's browser key
+- `src/lib/player.ts`: the browser key, the wallet link, and signed requests
 - `src/lib/server/near.ts`: contract reads and server-signed calls
 - `src/env.ts`: environment variables
 - `src/lib/connect-wallet.svelte`: MetaMask to NEAR testnet (chain 398)

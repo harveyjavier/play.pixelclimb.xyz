@@ -7,6 +7,7 @@
 
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
+use near_contract_standards::storage_management::ext_storage_management;
 use near_sdk::json_types::U128;
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{
@@ -19,6 +20,8 @@ const BPS: u128 = 10_000;
 const MAX_ROUND_MINUTES: u64 = 366 * 24 * 60;
 /// Caps the decay loop so a bad config can't make `gem_price` (and so `set_config`) run out of gas.
 const MAX_DECAY_STEPS: u64 = 10_000;
+/// $PCMB's storage_balance_bounds minimum (125 bytes), so a withdrawal can register a new wallet.
+const STORAGE_DEPOSIT: NearToken = NearToken::from_micronear(1_250);
 
 /// Gem price after `minutes` without a purchase: it drops `decay_bps` per minute and never goes below `base`.
 pub fn decayed_price(last: u128, base: u128, decay_bps: u32, minutes: u64) -> u128 {
@@ -208,30 +211,36 @@ impl Economy {
         self.round_ends_at = now + self.config.round_minutes * NS_PER_MINUTE;
     }
 
-    /// Send `amount` of the caller's balance to their $PCMB wallet. Needs the caller registered on the
-    /// token (storage_deposit); if the transfer fails the balance is restored.
+    /// Send `amount` of the caller's balance to their $PCMB wallet. If the transfer fails the balance
+    /// is restored.
     pub fn withdraw(&mut self, amount: U128) -> Promise {
-        let player = env::predecessor_account_id();
-        let mut account = self.players.get(&player).cloned().unwrap_or_default();
-        require!(
-            amount.0 > 0 && account.balance.0 >= amount.0,
-            "Not enough PCMB to withdraw"
-        );
-        account.balance = U128(account.balance.0 - amount.0);
-        self.players.insert(player.clone(), account);
-        ext_ft_core::ext(self.token.clone())
-            .with_attached_deposit(NearToken::from_yoctonear(1))
-            .with_static_gas(Gas::from_tgas(10))
-            .ft_transfer(
-                player.clone(),
-                amount,
-                Some("Pixel Climb withdrawal".into()),
-            )
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(Gas::from_tgas(5))
-                    .on_withdraw(player, amount),
-            )
+        self.send_out(env::predecessor_account_id(), amount)
+    }
+
+    /// Game server only: send `amount` of `player`'s balance to `player`'s own wallet, so a player
+    /// can withdraw without signing a NEAR transaction. It can't send anywhere else.
+    pub fn withdraw_for(&mut self, player: AccountId, amount: U128) -> Promise {
+        self.assert_server();
+        self.send_out(player, amount)
+    }
+
+    /// Game server only: move everything `from` has (balance, gems, best floor this round) to `to`.
+    /// The page links its browser account to a wallet, and the server checks both signatures first.
+    pub fn merge_player(&mut self, from: AccountId, to: AccountId) {
+        self.assert_server();
+        require!(from != to, "Can't merge a player into itself");
+        if let Some(old) = self.players.remove(&from) {
+            let mut account = self.players.get(&to).cloned().unwrap_or_default();
+            account.balance = U128(account.balance.0 + old.balance.0);
+            account.gems += old.gems;
+            self.players.insert(to.clone(), account);
+        }
+        if let Some(floor) = self.best.remove(&from) {
+            if floor > self.best.get(&to).copied().unwrap_or(0) {
+                self.best.insert(to.clone(), floor);
+            }
+        }
+        log!("Merged {from} into {to}");
     }
 
     #[private]
@@ -302,6 +311,44 @@ impl Economy {
         let mut account = self.players.get(player).cloned().unwrap_or_default();
         account.balance = U128(account.balance.0 + amount);
         self.players.insert(player.clone(), account);
+    }
+
+    /// Debits the balance, registers `player` on the token if needed (paid from this contract's NEAR,
+    /// refunded when already registered), then transfers. `on_withdraw` restores a failed transfer.
+    fn send_out(&mut self, player: AccountId, amount: U128) -> Promise {
+        let mut account = self.players.get(&player).cloned().unwrap_or_default();
+        require!(
+            amount.0 > 0 && account.balance.0 >= amount.0,
+            "Not enough PCMB to withdraw"
+        );
+        account.balance = U128(account.balance.0 - amount.0);
+        self.players.insert(player.clone(), account);
+        ext_storage_management::ext(self.token.clone())
+            .with_attached_deposit(STORAGE_DEPOSIT)
+            .with_static_gas(Gas::from_tgas(5))
+            .storage_deposit(Some(player.clone()), Some(true))
+            .then(
+                ext_ft_core::ext(self.token.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(Gas::from_tgas(10))
+                    .ft_transfer(
+                        player.clone(),
+                        amount,
+                        Some("Pixel Climb withdrawal".into()),
+                    ),
+            )
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(Gas::from_tgas(5))
+                    .on_withdraw(player, amount),
+            )
+    }
+
+    fn assert_server(&self) {
+        require!(
+            env::predecessor_account_id() == self.server,
+            "Only the game server can do this"
+        );
     }
 
     fn assert_owner(&self) {
