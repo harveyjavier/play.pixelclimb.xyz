@@ -27,7 +27,7 @@ The player's `0x…` address is their NEAR account, so players use the wallet th
 pnpm verify
 ```
 
-This reads NEAR testnet and prints the $PCMB supply, the prize pool, the gem price and the round end. It also checks that the token and economy contracts on testnet are the same code as [`contracts/`](contracts) in this repo. It needs Node 22+ and no wallet or keys. Without pnpm, `node scripts/verify.mjs` does the same and needs no install.
+This reads NEAR testnet and prints the $PCMB supply, the prize pool, the gem price and the round end. It also checks that the token and economy contracts on testnet are the same code as [`contracts/`](contracts) in this repo. It needs no wallet or keys. `pnpm verify` needs the same Node as the rest of the repo (22.22.2 or newer). Without pnpm, `node scripts/verify.mjs` does the same on Node 22 and needs no install.
 
 ### Economy
 
