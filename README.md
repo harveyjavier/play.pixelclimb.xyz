@@ -21,6 +21,14 @@ The player connects MetaMask, and the app switches it to **NEAR Protocol Testnet
 
 The player's `0x…` address is their NEAR account, so players use the wallet they already have and need no new NEAR account. The code is in [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
 
+### Check it without a wallet
+
+```sh
+pnpm verify
+```
+
+This reads NEAR testnet and prints the $PCMB supply, the prize pool, the gem price and the round end. It also checks that the token and economy contracts on testnet are the same code as [`contracts/`](contracts) in this repo. It needs no wallet or keys. `pnpm verify` needs the same Node as the rest of the repo (22.22.2 or newer). Without pnpm, `node scripts/verify.mjs` does the same on Node 22 and needs no install.
+
 ### Economy
 
 The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pixelclimb.testnet`](https://testnet.nearblocks.io/token/pcmb.pixelclimb.testnet) (5,000,000 supply, 9 decimals). It also serves as the governance token. MetaMask shows it as a normal token at `0x937ca2395d64855e08c74c30947a545eef6c1bf1` on NEAR Protocol Testnet. The contract is in [`contracts/pcmb-token`](contracts/pcmb-token).
