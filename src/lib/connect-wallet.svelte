@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { linkMessage } from '#lib/economy.ts';
+	import { playerId, savedLink, saveLink, signedPost, useWallet } from '#lib/player.ts';
+
 	// NEAR testnet's Ethereum-compatible RPC (NEP-518): MetaMask signs for a NEAR account named by its 0x address.
 	const CHAIN = {
 		chainId: '0x18e', // 398
@@ -15,7 +18,8 @@
 	};
 	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
 
-	let account = $state<string | null>(null);
+	/** The linked wallet (lowercase), or null. Runs and payouts go to this account. */
+	let { account = $bindable(null) }: { account?: string | null } = $props();
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
@@ -23,10 +27,14 @@
 	$effect(() => {
 		const eth = ethereum();
 		const onChain = (id: unknown) => {
-			if (id !== CHAIN.chainId) account = null;
+			if (id !== CHAIN.chainId) drop();
 		};
 		const onAccounts = (accounts: unknown) => {
-			if (account) account = (accounts as string[])[0] ?? null;
+			const [next] = accounts as string[];
+			if (account) {
+				if (next) adopt(eth!, next, false);
+				else drop();
+			}
 		};
 		eth?.on?.('chainChanged', onChain);
 		eth?.on?.('accountsChanged', onAccounts);
@@ -36,7 +44,7 @@
 			.then(async (accounts) => {
 				const [first] = accounts as string[];
 				if (first && (await eth.request({ method: 'eth_chainId' })) === CHAIN.chainId)
-					account = first;
+					await adopt(eth, first, false);
 			})
 			.catch(() => {}); // no session to restore
 		return () => {
@@ -60,9 +68,34 @@
 			throw new Error('Switch MetaMask to NEAR Protocol Testnet.');
 	}
 
+	function drop() {
+		account = null;
+		useWallet(null);
+	}
+
+	/**
+	 * Plays and earns as `address`. The wallet signs a link to this browser's key once (MetaMask only
+	 * asks when `ask` is set, so a reload never pops up), then earlier browser earnings move to it.
+	 */
+	async function adopt(eth: Eth, address: string, ask: boolean) {
+		const wallet = address.toLowerCase();
+		let link = savedLink(wallet);
+		if (!link) {
+			if (!ask) return drop();
+			link = (await eth.request({
+				method: 'personal_sign',
+				params: [linkMessage(playerId(), wallet), address]
+			})) as string;
+			saveLink(wallet, link);
+		}
+		useWallet({ address: wallet, link });
+		await signedPost('/api/link', { action: 'link' }).catch((e) => (error = (e as Error).message));
+		account = wallet; // after the move, so the page's first read already shows it
+	}
+
 	async function disconnect() {
 		const eth = ethereum();
-		account = null;
+		drop();
 		if (eth)
 			await eth
 				.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
@@ -85,7 +118,7 @@
 		try {
 			const [first] = (await eth.request({ method: 'eth_requestAccounts' })) as string[];
 			await useNearTestnet(eth);
-			account = first;
+			await adopt(eth, first, true);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not connect MetaMask.';
 		} finally {
@@ -95,6 +128,9 @@
 </script>
 
 <div class="wallet">
+	{#if error}
+		<span role="alert" class="error" title={error}>{error}</span>
+	{/if}
 	{#if account}
 		<a
 			href={`https://testnet.nearblocks.io/address/${account}`}
@@ -105,9 +141,6 @@
 		>
 		<button type="button" onclick={disconnect}>Disconnect</button>
 	{:else}
-		{#if error}
-			<span role="alert" class="error" title={error}>{error}</span>
-		{/if}
 		<button type="button" onclick={connect} disabled={busy}>
 			{busy ? 'Connecting…' : 'Connect Wallet'}
 		</button>

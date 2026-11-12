@@ -14,7 +14,13 @@ import {
 	teraToGas,
 	type KeyPairString
 } from 'near-api-js';
-import { MAX_REQUEST_AGE_MS, type EconomyState, type PlayerState } from '#lib/economy.ts';
+import {
+	MAX_REQUEST_AGE_MS,
+	linkedWallet,
+	type EconomyState,
+	type PlayerState,
+	type SignedPayload
+} from '#lib/economy.ts';
 
 const ECONOMY = ECONOMY_CONTRACT;
 const provider = new JsonRpcProvider({ url: NEAR_RPC_URL });
@@ -99,4 +105,22 @@ export function useOnce(signature: string) {
 	for (const [sig, at] of used) if (now - at > MAX_REQUEST_AGE_MS) used.delete(sig);
 	if (used.has(signature)) error(409, 'This request was already used');
 	used.set(signature, now);
+}
+
+/** The wallet a request plays for. Only a link that the wallet itself signed counts. */
+export function walletOf(req: SignedPayload): string {
+	const wallet = linkedWallet(req);
+	if (wallet === null) error(403, 'Connect a wallet first');
+	if (wallet === 'invalid') error(403, 'Wallet link is not valid, connect again');
+	return wallet;
+}
+
+/**
+ * Whose balance a run or a revive uses: the linked wallet, or the browser account when the request
+ * names no wallet. A new visitor earns with no wallet, and `/api/link` moves it over on connect.
+ */
+export function accountOf(req: SignedPayload): string {
+	const wallet = linkedWallet(req);
+	if (wallet === 'invalid') error(403, 'Wallet link is not valid, connect again');
+	return wallet ?? req.player;
 }

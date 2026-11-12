@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { KeyPair, base64Encode, keyToImplicitAddress } from 'near-api-js';
-import { formatPcmb, isPlausibleRun, verifyRequest, type SignedPayload } from './economy.ts';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import {
+	formatPcmb,
+	isPlausibleRun,
+	isWallet,
+	linkMessage,
+	linkedWallet,
+	recoverWallet,
+	verifyRequest,
+	type SignedPayload
+} from './economy.ts';
 
 const key = KeyPair.fromRandom('ed25519');
 const player = keyToImplicitAddress(key.getPublicKey());
@@ -65,4 +77,57 @@ test('formats raw $PCMB', () => {
 	assert.equal(formatPcmb('10000000000000'), '10,000');
 	assert.equal(formatPcmb('10500000000'), '10.5');
 	assert.equal(formatPcmb('0'), '0');
+});
+
+// Private key 1 is a well-known test key; its Ethereum address is 0x7e5f…5bdf.
+const walletKey = new Uint8Array(32);
+walletKey[31] = 1;
+const walletAddress = '0x7e5f4552091a69125d5dfcb7b8c2659029395bdf';
+
+/** What MetaMask's personal_sign returns: r, s, then v as 27 or 28. */
+function personalSign(message: string) {
+	const text = new TextEncoder().encode(message);
+	const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${text.length}`);
+	const hash = keccak_256(new Uint8Array([...prefix, ...text]));
+	const sig = secp256k1.sign(hash, walletKey, { prehash: false, format: 'recovered' });
+	return '0x' + bytesToHex(new Uint8Array([...sig.subarray(1), sig[0] + 27]));
+}
+
+test('recovers the wallet that signed a link', () => {
+	const message = linkMessage(player, walletAddress);
+	assert.equal(recoverWallet(message, personalSign(message)), walletAddress);
+});
+
+test('a link signed for another browser key gives another address', () => {
+	const other = keyToImplicitAddress(KeyPair.fromRandom('ed25519').getPublicKey());
+	const sig = personalSign(linkMessage(other, walletAddress));
+	assert.notEqual(recoverWallet(linkMessage(player, walletAddress), sig), walletAddress);
+});
+
+test('junk signatures recover nothing', () => {
+	assert.equal(recoverWallet('hi', '0x1234'), null);
+	assert.equal(recoverWallet('hi', 'not hex at all'), null);
+});
+
+test('wallets are lowercase 0x addresses', () => {
+	assert.ok(isWallet(walletAddress));
+	assert.ok(!isWallet(walletAddress.toUpperCase().replace('0X', '0x')));
+	assert.ok(!isWallet(player));
+});
+
+test('a request names no wallet, its own wallet, or an invalid one', () => {
+	const base = { ...run } as SignedPayload;
+	const link = personalSign(linkMessage(player, walletAddress));
+	// No wallet: the browser account plays for itself.
+	assert.equal(linkedWallet(base), null);
+	// The wallet signed the link for this browser key.
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress, link }), walletAddress);
+	// A link the wallet signed for another browser key does not count for this one.
+	const other = keyToImplicitAddress(KeyPair.fromRandom('ed25519').getPublicKey());
+	const otherLink = personalSign(linkMessage(other, walletAddress));
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress, link: otherLink }), 'invalid');
+	// Half a link, or another address, is refused instead of falling back to the browser account.
+	assert.equal(linkedWallet({ ...base, wallet: walletAddress }), 'invalid');
+	assert.equal(linkedWallet({ ...base, link }), 'invalid');
+	assert.equal(linkedWallet({ ...base, wallet: `0x${'1'.repeat(40)}`, link }), 'invalid');
 });

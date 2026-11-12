@@ -39,6 +39,8 @@ $PCMB comes in through the token's `ft_transfer_call`:
 | `buy_gem(player)`                           | The player, or the game server for them | Pays the current price from the balance into the next pool, raises the price |
 | `settle_round()`                            | Anyone, after the round ends            | Pays the pool by best floor and starts the next round                        |
 | `withdraw(amount)`                          | Player                                  | Sends $PCMB to the player's wallet (restored if the transfer fails)          |
+| `withdraw_for(player, amount)`              | Game server only                        | Same as `withdraw`, for the player, and only to the player's own account     |
+| `merge_player(from, to)`                    | Game server only                        | Moves balance, gems and this round's best floor from `from` to `to`          |
 | `ft_on_transfer(sender_id, amount, msg)`    | The $PCMB token only                    | Deposit (`""`) or add to the pool (`"pool"`). Any other msg is refunded      |
 | `set_config(config)` / `set_server(server)` | Owner                                   | Tunes settings without redeploying                                           |
 | `get_state()`                               | Anyone (view)                           | Round, end time (ms), pool, next pool, gem price, settings                   |
@@ -115,4 +117,4 @@ TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
    near contract call-function as-read-only $ECONOMY get_state json-args '{}' network-config testnet now
    ```
 
-Players need `storage_deposit` on the token before they can `withdraw`. The play page doesn't offer withdrawals yet. The game server account and its key are set up as described in the [root README](../../README.md#game-server-setup).
+`withdraw` and `withdraw_for` register the player on the token first (`storage_deposit`, 0.00125 NEAR from this contract's balance, refunded when already registered). The play page withdraws with `withdraw_for` and links a browser account to a wallet with `merge_player`. The game server account and its key are set up as described in the [root README](../../README.md#game-server-setup).

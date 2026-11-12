@@ -5,6 +5,10 @@
 	import { playerId, signedPost } from '#lib/player.ts';
 
 	let game = $state<HTMLIFrameElement>();
+	/** The linked wallet: runs, payouts and revives use it. Without one, this browser's own account earns. */
+	let wallet = $state<string | null>(null);
+	let withdrawing = $state(false);
+	let withdrawError = $state('');
 	let economy = $state.raw<StateResponse>();
 	let now = $state(Date.now());
 	type Panel = {
@@ -34,7 +38,9 @@
 
 	async function refresh() {
 		const seq = ++latest;
-		const res = await fetch(`/api/state?player=${playerId()}`).catch(() => null);
+		// Reads `wallet` synchronously, so the effect below reloads when a wallet links or leaves.
+		// Without a wallet, the browser account's own balance shows.
+		const res = await fetch(`/api/state?player=${wallet ?? playerId()}`).catch(() => null);
 		const data = res?.ok ? await res.json() : undefined;
 		if (data && seq === latest) economy = data;
 	}
@@ -98,6 +104,16 @@
 		refresh();
 	}
 
+	async function withdraw() {
+		withdrawing = true;
+		withdrawError = '';
+		await signedPost('/api/withdraw', { action: 'withdraw' }).catch(
+			(e) => (withdrawError = (e as Error).message)
+		);
+		withdrawing = false;
+		refresh();
+	}
+
 	function end() {
 		const id = over?.id;
 		over = undefined;
@@ -137,7 +153,7 @@
 		<span class="title"
 			><img src={logo} alt="" width="26" height="26" /><span class="name">Pixel Climb</span></span
 		>
-		<ConnectWallet />
+		<ConnectWallet bind:account={wallet} />
 	</nav>
 	<div class="stats">
 		{#if economy}
@@ -149,8 +165,21 @@
 					: 'Paying out…'} · Best {player?.best_floor ?? 0}
 			</span>
 			<span class="balance"
-				>{formatPcmb(player?.balance ?? '0')} $PCMB · {gems} {gems === 1 ? 'gem' : 'gems'}</span
-			>
+				>{formatPcmb(player?.balance ?? '0')} $PCMB · {gems}
+				{gems === 1 ? 'gem' : 'gems'}
+				{#if player && player.balance !== '0'}
+					{#if wallet}
+						· <button type="button" class="withdraw" onclick={withdraw} disabled={withdrawing}
+							>{withdrawing ? 'Sending…' : 'Withdraw'}</button
+						>
+					{:else}
+						· Connect a wallet to withdraw
+					{/if}
+				{/if}
+				{#if withdrawError}
+					<span role="alert" class="error" title={withdrawError}>{withdrawError}</span>
+				{/if}
+			</span>
 		{:else}
 			<span>Loading round…</span>
 		{/if}
@@ -244,6 +273,27 @@
 	}
 	.balance {
 		color: #eee;
+	}
+	.withdraw {
+		cursor: pointer;
+		border: 0;
+		background: none;
+		color: inherit;
+		padding: 0;
+		font: inherit;
+		text-decoration: underline;
+	}
+	.withdraw:disabled {
+		cursor: wait;
+		opacity: 0.6;
+	}
+	.stats .error {
+		display: inline-block;
+		max-width: 12rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		vertical-align: bottom;
+		color: #e5484d;
 	}
 	.stage {
 		position: relative;
