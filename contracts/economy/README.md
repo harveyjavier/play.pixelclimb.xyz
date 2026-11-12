@@ -7,6 +7,7 @@ One NEAR contract that runs the $PCMB game economy (issue #8): it records runs, 
 | Field                 | Value                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------ |
 | Contract              | [`economy.pixelclimb.testnet`](https://testnet.nearblocks.io/address/economy.pixelclimb.testnet) |
+| Built from            | `c41860d`, code hash `8NQZReFtzswLdhB5itHEffw5MooPGcCzFeGF7sqFZpZJ`                              |
 | Owner and game server | `pixelclimb.testnet` (the server changes with `set_server` once the play page has its own key)   |
 | Token                 | `pcmb.pixelclimb.testnet`                                                                        |
 | Settings              | The demo column below                                                                            |
@@ -94,7 +95,7 @@ TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
    cargo near deploy build-non-reproducible-wasm $ECONOMY with-init-call new json-args "{\"owner\":\"$OWNER\",\"server\":\"$SERVER\",\"token\":\"$TOKEN\",\"config\":{\"round_minutes\":5,\"gem_base_price\":\"10000000000\",\"price_step_bps\":500,\"price_decay_bps\":100,\"min_floor\":10}}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
    ```
 
-   On Windows this fails at the ABI step. Build with `cargo near build non-reproducible-wasm --no-abi`, then deploy the file with `near contract deploy $ECONOMY use-file target/near/pixelclimb_economy.wasm with-init-call new json-args …` and the same arguments.
+   If the ABI step fails on Windows, build with `cargo near build non-reproducible-wasm --no-abi`, then deploy the file with `near contract deploy $ECONOMY use-file target/near/pixelclimb_economy.wasm with-init-call new json-args …` and the same arguments.
 
 3. Register the contract on the token so it can hold $PCMB. The token refunds any deposit above what it needs:
 
