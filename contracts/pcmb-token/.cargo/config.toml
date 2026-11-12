@@ -1,0 +1,4 @@
+# Lets tests build on Windows without NASM installed, by using prebuilt assembly objects.
+# Set on every platform; it has no effect where NASM isn't needed.
+[env]
+AWS_LC_SYS_PREBUILT_NASM = "1"
