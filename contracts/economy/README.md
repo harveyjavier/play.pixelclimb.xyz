@@ -47,16 +47,18 @@ First pool: 10,000 $PCMB (`10000000000000`), seeded by the owner.
 
 ## Test and build
 
-Requirements: Rust, the `wasm32-unknown-unknown` target and [cargo-near](https://github.com/near/cargo-near). Install it from its [prebuilt releases](https://github.com/near/cargo-near/releases); `cargo install cargo-near` can fail to link its bundled wasm-opt on newer GCC.
+Requirements: [rustup](https://rustup.rs) and [cargo-near](https://github.com/near/cargo-near). `rust-toolchain.toml` pins Rust 1.95 and the wasm target, and rustup installs them on first build. Install cargo-near from its [prebuilt releases](https://github.com/near/cargo-near/releases); `cargo install cargo-near` can fail to link its bundled wasm-opt on newer GCC.
 
 ```sh
 cargo test                                  # unit tests
 cargo near build non-reproducible-wasm      # target/near/pixelclimb_economy.wasm
 ```
 
+On Windows, add `--no-abi` to the build (the ABI step fails to link there). `.cargo/config.toml` sets `AWS_LC_SYS_PREBUILT_NASM` so tests build there without NASM.
+
 ## Deploy to testnet
 
-Requirements: [near-cli-rs](https://github.com/near/near-cli-rs), with keys in the system keychain. Keys never go in this repo.
+Requirements: [near-cli-rs](https://github.com/near/near-cli-rs). The commands use the legacy keychain (`~/.near-credentials/testnet/`), where the `pixelclimb.testnet` keys are. If your keys are in the system keychain, use `sign-with-keychain` and `save-to-keychain` instead. Keys never go in this repo.
 Set these first:
 
 ```sh
@@ -69,25 +71,25 @@ TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
 1. Create the contract account. The wasm is about 160 KB, which locks about 1.6 NEAR for storage:
 
    ```sh
-   near account create-account fund-myself $ECONOMY '3 NEAR' autogenerate-new-keypair save-to-keychain sign-as $OWNER network-config testnet sign-with-keychain send
+   near account create-account fund-myself $ECONOMY '3 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as $OWNER network-config testnet sign-with-legacy-keychain send
    ```
 
 2. Deploy and initialize with the demo settings:
 
    ```sh
-   cargo near deploy build-non-reproducible-wasm $ECONOMY with-init-call new json-args "{\"owner\":\"$OWNER\",\"server\":\"$SERVER\",\"token\":\"$TOKEN\",\"config\":{\"round_minutes\":5,\"gem_base_price\":\"10000000000\",\"price_step_bps\":500,\"price_decay_bps\":100,\"min_floor\":10}}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-keychain send
+   cargo near deploy build-non-reproducible-wasm $ECONOMY with-init-call new json-args "{\"owner\":\"$OWNER\",\"server\":\"$SERVER\",\"token\":\"$TOKEN\",\"config\":{\"round_minutes\":5,\"gem_base_price\":\"10000000000\",\"price_step_bps\":500,\"price_decay_bps\":100,\"min_floor\":10}}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
    ```
 
 3. Register the contract on the token so it can hold $PCMB. The token refunds any deposit above what it needs:
 
    ```sh
-   near contract call-function as-transaction $TOKEN storage_deposit json-args "{\"account_id\":\"$ECONOMY\"}" prepaid-gas '30.0 Tgas' attached-deposit '0.01 NEAR' sign-as $OWNER network-config testnet sign-with-keychain send
+   near contract call-function as-transaction $TOKEN storage_deposit json-args "{\"account_id\":\"$ECONOMY\"}" prepaid-gas '30.0 Tgas' attached-deposit '0.01 NEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
    ```
 
 4. Seed the first pool with 10,000 $PCMB:
 
    ```sh
-   near contract call-function as-transaction $TOKEN ft_transfer_call json-args "{\"receiver_id\":\"$ECONOMY\",\"amount\":\"10000000000000\",\"msg\":\"pool\"}" prepaid-gas '100.0 Tgas' attached-deposit '1 yoctoNEAR' sign-as $OWNER network-config testnet sign-with-keychain send
+   near contract call-function as-transaction $TOKEN ft_transfer_call json-args "{\"receiver_id\":\"$ECONOMY\",\"amount\":\"10000000000000\",\"msg\":\"pool\"}" prepaid-gas '100.0 Tgas' attached-deposit '1 yoctoNEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
    ```
 
 5. Check it:

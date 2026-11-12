@@ -17,11 +17,13 @@ use near_sdk::{
 const NS_PER_MINUTE: u64 = 60_000_000_000;
 const BPS: u128 = 10_000;
 const MAX_ROUND_MINUTES: u64 = 366 * 24 * 60;
+/// Caps the decay loop so a bad config can't make `gem_price` (and so `set_config`) run out of gas.
+const MAX_DECAY_STEPS: u64 = 10_000;
 
 /// Gem price after `minutes` without a purchase: it drops `decay_bps` per minute and never goes below `base`.
 pub fn decayed_price(last: u128, base: u128, decay_bps: u32, minutes: u64) -> u128 {
     let mut price = last;
-    for _ in 0..minutes {
+    for _ in 0..minutes.min(MAX_DECAY_STEPS) {
         if price <= base || decay_bps == 0 {
             break;
         }
@@ -52,6 +54,10 @@ impl Config {
             "round_minutes must be between 1 and a year"
         );
         require!(self.gem_base_price.0 > 0, "gem_base_price must be above 0");
+        require!(
+            self.price_step_bps as u128 <= BPS,
+            "price_step_bps must be at most 10000"
+        );
         require!(
             self.price_decay_bps as u128 <= BPS,
             "price_decay_bps must be at most 10000"

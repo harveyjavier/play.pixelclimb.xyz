@@ -82,6 +82,14 @@ fn decayed_price_never_below_base() {
 }
 
 #[test]
+fn decayed_price_loop_is_capped() {
+    // 1 bps a minute for a year would loop 525,600 times; the cap stops at 10,000 steps.
+    let after_cap = decayed_price(10u128.pow(30), 1, 1, 10_000);
+    assert_eq!(decayed_price(10u128.pow(30), 1, 1, 525_600), after_cap);
+    assert!(after_cap > 1 && after_cap < 10u128.pow(30));
+}
+
+#[test]
 fn decayed_price_without_decay_stays() {
     assert_eq!(decayed_price(1000, 100, 0, u64::MAX), 1000);
 }
@@ -422,6 +430,16 @@ fn rejects_bad_config() {
     let mut c = setup();
     let mut bad = config();
     bad.price_decay_bps = 10_001;
+    at(1, owner());
+    c.set_config(bad);
+}
+
+#[test]
+#[should_panic(expected = "price_step_bps must be at most 10000")]
+fn rejects_huge_price_step() {
+    let mut c = setup();
+    let mut bad = config();
+    bad.price_step_bps = 10_001;
     at(1, owner());
     c.set_config(bad);
 }
