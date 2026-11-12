@@ -1,0 +1,101 @@
+# Pixel Climb economy contract
+
+One NEAR contract that runs the $PCMB game economy (issue #8): it records runs, sells gems (revives) and pays out each round's pool.
+
+## How it works
+
+- **Earn.** Each round has a fixed pool. When the round ends, `settle_round` splits it among players whose best floor is at or above `min_floor`, in proportion to that floor. Rounding leftovers, and the whole pool if nobody qualifies, carry over to the next round.
+- **Spend.** `buy_gem` takes the current gem price from the player's balance. Each gem raises the price by `price_step_bps`, and the price drops by `price_decay_bps` for every full minute without a purchase, never below `gem_base_price`. The rule is in `decayed_price` in [`src/lib.rs`](src/lib.rs).
+- **Recycle.** Every gem payment goes into `next_pool`, which becomes the pool of the next round.
+
+$PCMB comes in through the token's `ft_transfer_call`:
+
+- msg `""` credits the sender's in-game balance.
+- msg `"pool"` adds to the current round's pool. The owner uses this to seed the pool.
+
+`withdraw` sends a balance back to the player's wallet. In between, $PCMB is an internal balance, so payouts and gem purchases never need a cross-contract call.
+
+## Methods
+
+| Method                                      | Who can call                            | What it does                                                                 |
+| ------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| `new(owner, server, token, config)`         | Deployer (init)                         | Sets accounts and settings, and starts round 1                               |
+| `record_run(player, floor)`                 | Game server only                        | Keeps the player's best floor for the current round                          |
+| `buy_gem(player)`                           | The player, or the game server for them | Pays the current price from the balance into the next pool, raises the price |
+| `settle_round()`                            | Anyone, after the round ends            | Pays the pool by best floor and starts the next round                        |
+| `withdraw(amount)`                          | Player                                  | Sends $PCMB to the player's wallet (restored if the transfer fails)          |
+| `ft_on_transfer(sender_id, amount, msg)`    | The $PCMB token only                    | Deposit (`""`) or add to the pool (`"pool"`). Any other msg is refunded      |
+| `set_config(config)` / `set_server(server)` | Owner                                   | Tunes settings without redeploying                                           |
+| `get_state()`                               | Anyone (view)                           | Round, end time (ms), pool, next pool, gem price, settings                   |
+| `get_player(player)`                        | Anyone (view)                           | Best floor this round, balance, gems bought                                  |
+
+Runs can't be recorded after the round ends. The game server calls `settle_round` first.
+
+## Settings
+
+Amounts are raw units (9 decimals, so `10000000000` = 10 $PCMB).
+
+| Setting           | Demo            | Production    |
+| ----------------- | --------------- | ------------- |
+| `round_minutes`   | `5`             | `1440`        |
+| `gem_base_price`  | `10000000000`   | `10000000000` |
+| `price_step_bps`  | `500` (+5%)     | `500`         |
+| `price_decay_bps` | `100` (-1%/min) | `100`         |
+| `min_floor`       | `10`            | `10`          |
+
+First pool: 10,000 $PCMB (`10000000000000`), seeded by the owner.
+
+## Test and build
+
+Requirements: [rustup](https://rustup.rs) and [cargo-near](https://github.com/near/cargo-near). `rust-toolchain.toml` pins Rust 1.95 and the wasm target, and rustup installs them on first build. Install cargo-near from its [prebuilt releases](https://github.com/near/cargo-near/releases); `cargo install cargo-near` can fail to link its bundled wasm-opt on newer GCC.
+
+```sh
+cargo test                                  # unit tests
+cargo near build non-reproducible-wasm      # target/near/pixelclimb_economy.wasm
+```
+
+On Windows, add `--no-abi` to the build (the ABI step fails to link there). `.cargo/config.toml` sets `AWS_LC_SYS_PREBUILT_NASM` so tests build there without NASM.
+
+## Deploy to testnet
+
+Requirements: [near-cli-rs](https://github.com/near/near-cli-rs). The commands use the legacy keychain (`~/.near-credentials/testnet/`), where the `pixelclimb.testnet` keys are. If your keys are in the system keychain, use `sign-with-keychain` and `save-to-keychain` instead. Keys never go in this repo.
+Set these first:
+
+```sh
+OWNER=pixelclimb.testnet      # owns the contract and holds the $PCMB supply
+ECONOMY=economy.$OWNER
+SERVER=$OWNER                 # until the play page's server key exists (#9); then `set_server`
+TOKEN=pcmb.pixelclimb.testnet # the $PCMB contract (contracts/pcmb-token)
+```
+
+1. Create the contract account. The wasm is about 160 KB, which locks about 1.6 NEAR for storage:
+
+   ```sh
+   near account create-account fund-myself $ECONOMY '3 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as $OWNER network-config testnet sign-with-legacy-keychain send
+   ```
+
+2. Deploy and initialize with the demo settings:
+
+   ```sh
+   cargo near deploy build-non-reproducible-wasm $ECONOMY with-init-call new json-args "{\"owner\":\"$OWNER\",\"server\":\"$SERVER\",\"token\":\"$TOKEN\",\"config\":{\"round_minutes\":5,\"gem_base_price\":\"10000000000\",\"price_step_bps\":500,\"price_decay_bps\":100,\"min_floor\":10}}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
+   ```
+
+3. Register the contract on the token so it can hold $PCMB. The token refunds any deposit above what it needs:
+
+   ```sh
+   near contract call-function as-transaction $TOKEN storage_deposit json-args "{\"account_id\":\"$ECONOMY\"}" prepaid-gas '30.0 Tgas' attached-deposit '0.01 NEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
+   ```
+
+4. Seed the first pool with 10,000 $PCMB:
+
+   ```sh
+   near contract call-function as-transaction $TOKEN ft_transfer_call json-args "{\"receiver_id\":\"$ECONOMY\",\"amount\":\"10000000000000\",\"msg\":\"pool\"}" prepaid-gas '100.0 Tgas' attached-deposit '1 yoctoNEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
+   ```
+
+5. Check it:
+
+   ```sh
+   near contract call-function as-read-only $ECONOMY get_state json-args '{}' network-config testnet now
+   ```
+
+Players need `storage_deposit` on the token before they can `withdraw`. The play page's server handles this (#9).
