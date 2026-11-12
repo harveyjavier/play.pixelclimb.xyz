@@ -209,9 +209,11 @@
 		width: 100%;
 		height: 2.5rem;
 		max-width: min(100%, calc((100dvh - 8.5rem) * 2 / 3));
+		min-width: 15.5rem; /* logo, short address and Disconnect; very short windows let it pass the frame a little */
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
+		container-type: inline-size; /* its width follows the frame, which narrows on short windows */
 		font: 0.75rem/1 monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
@@ -330,8 +332,8 @@
 			box-sizing: border-box;
 		}
 	}
-	/* Below ~380px the name no longer fits beside the short address: logo only, screen readers still get the name. */
-	@media (max-width: 379px) {
+	/* A nav under 350px can't fit the name beside the short address: logo only, screen readers still get the name. */
+	@container (max-width: 349px) {
 		.name {
 			position: absolute;
 			width: 1px;
