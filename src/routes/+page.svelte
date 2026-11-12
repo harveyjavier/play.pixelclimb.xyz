@@ -263,7 +263,8 @@
 		src: url('/fonts/silkscreen.ttf') format('truetype');
 		font-display: swap;
 	}
-	/* Game-over panel in the game's look: white, slate gray (common.gray), pixel font, square edges. */
+	/* Game-over panel in the game's look: white, pixel font, square edges, and the game's slate gray
+	   (common.gray, #708090) darkened so text passes 4.5:1 contrast even over a dark frame. */
 	.over {
 		position: absolute;
 		inset: 0;
@@ -274,7 +275,7 @@
 		gap: 0.875rem;
 		padding: 1.5rem;
 		background: rgb(255 255 255 / 0.92);
-		color: #708090;
+		color: #5a6978;
 		font:
 			0.875rem/1.4 Silkscreen,
 			monospace;
@@ -294,21 +295,21 @@
 		margin: 0;
 	}
 	.over .error {
-		color: #f60000;
+		color: #d00000;
 	}
 	.over button {
 		min-width: 15rem;
 		cursor: pointer;
-		border: 3px solid #708090;
+		border: 3px solid #5a6978;
 		border-radius: 0;
 		background: #fff;
-		color: #708090;
+		color: #5a6978;
 		padding: 0.75rem 1rem;
 		font: inherit;
 		text-transform: inherit;
 	}
 	.over button:first-of-type {
-		background: #708090;
+		background: #5a6978;
 		color: #fff;
 	}
 	.over button:disabled {

@@ -27,7 +27,11 @@ const EXCLUDED_EXT = [
 	'.o',
 	'.lnk',
 	'.class',
-	'.log'
+	'.log',
+	// Not in webPackageApp.lua: pixel-climb's notes, Windows helper scripts and source art the game never loads.
+	'.md',
+	'.bat',
+	'.pspimage'
 ];
 const included = (name) =>
 	!name.startsWith('.') &&
