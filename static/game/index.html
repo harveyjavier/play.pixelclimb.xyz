@@ -95,7 +95,7 @@ k.p.toString(16)+", data=0x"+p.toString(16)))}return m};t.L=function(a){this.j=a
 
           // No alert(): it would block the parent play page that embeds this frame.
           // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-          canvas.addEventListener("webglcontextlost", function(e) { statusElement.textContent = 'WebGL context lost. Reload the page.'; console.error('WebGL context lost'); e.preventDefault(); }, false);
+          canvas.addEventListener("webglcontextlost", function(e) { canvas.style.display = 'none'; statusElement.textContent = 'WebGL context lost. Reload the page.'; console.error('WebGL context lost'); e.preventDefault(); }, false);
 
           return canvas;
         })(),

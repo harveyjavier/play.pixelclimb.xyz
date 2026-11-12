@@ -26,8 +26,11 @@
 	);
 
 	// The game ignores a reply whose id is not its latest game over (pcbridge.js).
-	const tell = (type: 'pc:revive' | 'pc:end', id?: number) =>
+	// Focus goes back to the game too, so the space bar keeps working after a panel button.
+	const tell = (type: 'pc:revive' | 'pc:end', id?: number) => {
 		game?.contentWindow?.postMessage({ type, id }, location.origin);
+		game?.focus();
+	};
 
 	async function refresh() {
 		const seq = ++latest;
@@ -131,7 +134,9 @@
 
 <main>
 	<nav>
-		<span class="title"><img src={logo} alt="" width="26" height="26" />Pixel Climb</span>
+		<span class="title"
+			><img src={logo} alt="" width="26" height="26" /><span class="name">Pixel Climb</span></span
+		>
 		<ConnectWallet />
 	</nav>
 	<div class="stats">
@@ -151,12 +156,13 @@
 		{/if}
 	</div>
 	<div class="stage">
-		<!-- Solar2D HTML5 build in static/game (from scripts/game-web/build.sh in the landing repo). -->
+		<!-- Solar2D HTML5 build in static/game, made by scripts/game-web/build.sh. -->
 		<iframe
 			bind:this={game}
 			src="/game/index.html"
 			title="Pixel Climb game"
 			allow="autoplay; fullscreen"
+			onload={() => game?.focus()}
 		></iframe>
 		{#if over}
 			<div
@@ -251,6 +257,14 @@
 		height: 100%;
 		border: 0;
 	}
+	/* The game's own font (pixel-climb/fonts/slkscr.ttf), so the game-over panel looks like the game. */
+	@font-face {
+		font-family: Silkscreen;
+		src: url('/fonts/silkscreen.ttf') format('truetype');
+		font-display: swap;
+	}
+	/* Game-over panel in the game's look: white, pixel font, square edges, and the game's slate gray
+	   (common.gray, #708090) darkened so text passes 4.5:1 contrast even over a dark frame. */
 	.over {
 		position: absolute;
 		inset: 0;
@@ -258,47 +272,49 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 0.75rem;
+		gap: 0.875rem;
 		padding: 1.5rem;
-		background: rgb(0 0 0 / 0.82);
-		font: 0.8125rem/1.4 monospace;
+		background: rgb(255 255 255 / 0.92);
+		color: #5a6978;
+		font:
+			0.875rem/1.4 Silkscreen,
+			monospace;
 		text-align: center;
+		text-transform: uppercase;
 	}
 	.over h2 {
-		margin: 0;
-		font-size: 1.5rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
+		margin: 0 0 0.5rem;
+		font-size: 2rem;
+		font-weight: normal;
+		letter-spacing: 0.05em;
 	}
 	.over:focus {
 		outline: none;
 	}
 	.over p {
 		margin: 0;
-		color: #aaa;
 	}
 	.over .error {
-		color: #e5484d;
+		color: #d00000;
 	}
 	.over button {
-		min-width: 14rem;
+		min-width: 15rem;
 		cursor: pointer;
-		border: 1px solid #444;
-		border-radius: 0.5rem;
-		background: none;
-		color: inherit;
+		border: 3px solid #5a6978;
+		border-radius: 0;
+		background: #fff;
+		color: #5a6978;
 		padding: 0.75rem 1rem;
 		font: inherit;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
+		text-transform: inherit;
 	}
-	.over button:first-of-type:not(:disabled) {
-		border-color: #f5c542;
-		color: #f5c542;
+	.over button:first-of-type {
+		background: #5a6978;
+		color: #fff;
 	}
 	.over button:disabled {
 		cursor: default;
-		opacity: 0.5;
+		opacity: 0.4;
 	}
 	/* Phones: drop the framed card, nav on top, game fills the rest edge to edge. */
 	@media (max-width: 600px) {
@@ -311,6 +327,15 @@
 			max-width: none;
 			padding: 0 0.75rem;
 			box-sizing: border-box;
+		}
+		/* Just the logo on screen (the wallet address needs the room); screen readers still get the name. */
+		.name {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
 		}
 		.stats {
 			height: auto;
