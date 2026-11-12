@@ -6,8 +6,9 @@ const TOKEN = 'pcmb.pixelclimb.testnet';
 const ECONOMY = 'economy.pixelclimb.testnet';
 const OWNER = 'pixelclimb.testnet';
 
-// What this repo expects to find on testnet. Update the code hashes after a redeploy
-// (`cargo near build` prints the new one).
+// What this repo expects to find on testnet. After a redeploy, update the code hash here
+// (`cargo near build` prints the new one) and in the "Deployed on testnet" table of
+// contracts/economy/README.md, which records the economy hash too.
 const EXPECTED = {
 	symbol: 'PCMB',
 	decimals: 9,
@@ -66,7 +67,12 @@ const [metadata, supply, tokenHash, economyHash, state, economyHolds, ownerHolds
 		view(ECONOMY, 'get_state'),
 		view(TOKEN, 'ft_balance_of', { account_id: ECONOMY }),
 		view(TOKEN, 'ft_balance_of', { account_id: OWNER })
-	]);
+	]).catch((e) => {
+		// A network failure hides its reason in `cause`; a contract or RPC error has it in `message`.
+		const reason = e?.cause?.code ?? e?.cause?.message ?? e?.message ?? e;
+		console.error(`Could not read NEAR testnet through ${RPC}: ${reason}`);
+		process.exit(1);
+	});
 
 const roundEnd = new Date(state.round_ends_at_ms);
 const roundOver = roundEnd.getTime() <= Date.now();
