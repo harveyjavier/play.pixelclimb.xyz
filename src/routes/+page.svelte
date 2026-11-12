@@ -211,6 +211,7 @@
 		max-width: min(100%, calc((100dvh - 8.5rem) * 2 / 3));
 		align-items: center;
 		justify-content: space-between;
+		gap: 1rem;
 		font: 0.75rem/1 monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
@@ -328,7 +329,9 @@
 			padding: 0 0.75rem;
 			box-sizing: border-box;
 		}
-		/* Just the logo on screen (the wallet address needs the room); screen readers still get the name. */
+	}
+	/* Below ~380px the name no longer fits beside the short address: logo only, screen readers still get the name. */
+	@media (max-width: 379px) {
 		.name {
 			position: absolute;
 			width: 1px;
@@ -337,6 +340,8 @@
 			clip-path: inset(50%);
 			white-space: nowrap;
 		}
+	}
+	@media (max-width: 600px) {
 		.stats {
 			height: auto;
 			max-width: none;
