@@ -33,6 +33,16 @@ near contract call-function as-transaction address-map.near register json-args '
 
 MetaMask can show balances and send PCMB. It cannot call `mint`; that needs the owner's NEAR key.
 
+## Receivers must be registered
+
+An account can only receive PCMB after it is registered with the token. Otherwise `ft_transfer` and `mint` fail with "not registered". A new `0x…` account is not registered.
+
+```sh
+near contract call-function as-transaction pcmb.pixelclimb.testnet storage_deposit json-args '{"account_id":"<receiver>","registration_only":true}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' sign-as <payer> network-config testnet sign-with-legacy-keychain send
+```
+
+Per NEP-518, a send from MetaMask checks this and pays the receiver's registration itself. We have not tested that path yet.
+
 ## Check it
 
 ```sh

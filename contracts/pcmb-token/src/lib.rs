@@ -1,7 +1,7 @@
 //! $PCMB, the Pixel Climb token: a NEP-141 fungible token with NEP-148 metadata.
 //! Mirrors the Solana devnet token: 9 decimals, 5,000,000 initial supply, owner can mint more.
 
-use near_contract_standards::fungible_token::events::FtMint;
+use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
 };
@@ -77,15 +77,18 @@ impl Contract {
     }
 
     /// Owner-only: mints `amount` more tokens to `account_id`, like the devnet mint authority.
+    /// The account must already be registered with `storage_deposit`. Registering it here for free
+    /// would let it call `storage_unregister` and collect a storage refund it never paid.
     pub fn mint(&mut self, account_id: AccountId, amount: U128) {
         require!(
             env::predecessor_account_id() == self.owner_id,
             "Only the owner can mint"
         );
         require!(amount.0 > 0, "Amount must be positive");
-        if !self.token.accounts.contains_key(&account_id) {
-            self.token.internal_register_account(&account_id);
-        }
+        require!(
+            self.token.accounts.contains_key(&account_id),
+            "Account is not registered; call storage_deposit first"
+        );
         self.token.internal_deposit(&account_id, amount.0);
         FtMint {
             owner_id: &account_id,
@@ -161,7 +164,20 @@ impl StorageManagement for Contract {
 
     #[payable]
     fn storage_unregister(&mut self, force: Option<bool>) -> bool {
-        self.token.internal_storage_unregister(force).is_some()
+        // A forced unregister burns the account's balance, so emit the burn for indexers.
+        if let Some((owner_id, balance)) = self.token.internal_storage_unregister(force) {
+            if balance > 0 {
+                FtBurn {
+                    owner_id: &owner_id,
+                    amount: U128(balance),
+                    memo: Some("storage_unregister"),
+                }
+                .emit();
+            }
+            true
+        } else {
+            false
+        }
     }
 
     fn storage_balance_bounds(&self) -> StorageBalanceBounds {
@@ -222,9 +238,36 @@ mod tests {
     #[test]
     fn owner_can_mint_more() {
         let mut contract = deploy();
+        contract.token.internal_register_account(&player());
         contract.mint(player(), U128(1_000_000_000));
         assert_eq!(contract.ft_balance_of(player()).0, 1_000_000_000);
         assert_eq!(contract.ft_total_supply().0, 5_000_001_000_000_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "Account is not registered")]
+    fn mint_needs_a_registered_account() {
+        let mut contract = deploy();
+        contract.mint(player(), U128(1));
+    }
+
+    #[test]
+    fn forced_unregister_burns_and_logs_it() {
+        let mut contract = deploy();
+        contract.token.internal_register_account(&player());
+        contract.mint(player(), U128(1_000_000_000));
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(player())
+            .attached_deposit(NearToken::from_yoctonear(1))
+            .build());
+        assert!(contract.storage_unregister(Some(true)));
+
+        assert_eq!(contract.ft_total_supply().0, 5_000_000_000_000_000);
+        let logs = near_sdk::test_utils::get_logs();
+        assert!(logs
+            .iter()
+            .any(|log| log.contains("ft_burn") && log.contains("1000000000")));
     }
 
     #[test]
