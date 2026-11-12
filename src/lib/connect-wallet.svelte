@@ -101,7 +101,7 @@
 			target="_blank"
 			rel="noopener noreferrer"
 			title={`${account} on ${CHAIN.chainName}`}
-			class="account">{account}</a
+			class="account">{account.slice(0, 6)}…{account.slice(-4)}</a
 		>
 		<button type="button" onclick={disconnect}>Disconnect</button>
 	{:else}
@@ -109,7 +109,7 @@
 			<span role="alert" class="error" title={error}>{error}</span>
 		{/if}
 		<button type="button" onclick={connect} disabled={busy}>
-			{busy ? 'Connecting…' : 'Connect MetaMask'}
+			{busy ? 'Connecting…' : 'Connect Wallet'}
 		</button>
 	{/if}
 </div>
@@ -137,10 +137,8 @@
 		opacity: 0.6;
 	}
 	.account {
-		max-width: 9rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		white-space: nowrap;
+		text-transform: none; /* keep 0x lowercase, as in the issue's example */
 		color: inherit;
 	}
 	.error {
