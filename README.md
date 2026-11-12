@@ -53,6 +53,7 @@ Known limits:
 - The run's duration comes from the browser, so the check stops impossible runs, not someone who sends a made-up but possible one. Nothing stops one person from playing with several browser keys either, and each saved run costs the server gas.
 - Copies of one request sent at the same moment to different server instances can both get through; a shared store would close that.
 - Winnings stay in the economy contract as an in-game balance. The page has no withdraw button yet, so they don't show in a wallet.
+- A player's balance belongs to the key in their browser's `localStorage`. Clearing site data, or switching browser or device, loses it, since there is no export or withdraw yet.
 - The page and the game are only tested together with simulated `pc:gameover` messages until `static/game/` is rebuilt from pixel-climb#1.
 
 ### Game server setup
@@ -64,16 +65,16 @@ OWNER=pixelclimb.testnet
 ECONOMY=economy.$OWNER
 SERVER=server.$OWNER
 
-near account create-account fund-myself $SERVER '2 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as $OWNER network-config testnet sign-with-legacy-keychain send
+near account create-account fund-myself $SERVER '1 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as $OWNER network-config testnet sign-with-legacy-keychain send
 near account add-key $SERVER grant-function-call-access --allowance unlimited --contract-account-id $ECONOMY --function-names 'record_run, buy_gem, settle_round' autogenerate-new-keypair save-to-legacy-keychain network-config testnet sign-with-legacy-keychain send
 near contract call-function as-transaction $ECONOMY set_server json-args "{\"server\":\"$SERVER\"}" prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' sign-as $OWNER network-config testnet sign-with-legacy-keychain send
 ```
 
-The second command prints the path of the new key file. Its `private_key` goes in `NEAR_SERVER_KEY`, and `$SERVER` in `NEAR_SERVER_ACCOUNT`, as Vercel environment variables. See [`.env.example`](.env.example). The 2 NEAR pays for gas; top it up when it runs low.
+The second command prints the path of the new key file. Its `private_key` goes in `NEAR_SERVER_KEY`, and `$SERVER` in `NEAR_SERVER_ACCOUNT`, as Vercel environment variables. See [`.env.example`](.env.example). The 1 NEAR pays for gas; top it up when it runs low.
 
 ## Try it (judges)
 
-Requirements: Node 22+, [pnpm](https://pnpm.io), and a desktop browser with [MetaMask](https://metamask.io). Brave's built-in wallet can block the game; use Chrome, Chromium or Firefox.
+Requirements: Node 22.22.2 or newer, [pnpm](https://pnpm.io), and a desktop browser with [MetaMask](https://metamask.io). Brave's built-in wallet can block the game; use Chrome, Chromium or Firefox.
 
 ```sh
 pnpm install
