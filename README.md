@@ -62,7 +62,20 @@ Known limits:
 - Copies of one request sent at the same moment to different server instances can both get through; a shared store would close that.
 - Winnings stay in the economy contract as an in-game balance. The page has no withdraw button yet, so they don't show in a wallet.
 - A player's balance belongs to the key in their browser's `localStorage`. Clearing site data, or switching browser or device, loses it, since there is no export or withdraw yet.
-- The page and the game are only tested together with simulated `pc:gameover` messages until `static/game/` is rebuilt from pixel-climb#1.
+
+### Rebuilding the game
+
+`static/game/` is built from the Solar2D project at [hsjtechnologies/pixel-climb](https://github.com/hsjtechnologies/pixel-climb) with:
+
+```sh
+scripts/game-web/build.sh /path/to/pixel-climb
+```
+
+It needs Docker, `gh`, `unzip`, `zip` and Node, and works on Linux. Solar2D's command-line builder can't target HTML5, so the script builds the game for Linux with the last Solar2D release that has a Linux builder (2024.3711, run in a container with no network), then packs the compiled game into Solar2D's HTML5 template ([`pack.mjs`](scripts/game-web/pack.mjs), which follows Solar2D's own `webPackageApp.lua`). On the way it:
+
+- marks the game's Android/iOS plugins (Google Play Games, review popup, Twitter) as mobile-only, so the builder skips them;
+- replaces the template's `alert()` calls, which would block the whole play page from inside the iframe, with a message in the game frame;
+- patches two engine bugs: text with a zero line height, and a resize loop at some screen scales (a laptop at 125% to 180%) that left the game white after the intro.
 
 ### Game server setup
 
@@ -109,6 +122,8 @@ Checks: `pnpm check` (types), `pnpm lint` and `pnpm test` (request signing and t
 - `src/env.ts`: environment variables
 - `src/lib/connect-wallet.svelte`: MetaMask to NEAR testnet (chain 398)
 - `static/game/`: the game's Solar2D HTML5 build (compiled output, served as-is)
+- `scripts/game-web/`: builds `static/game/` from the pixel-climb repo
+- `static/fonts/`: the game's pixel font, used by the game-over panel
 - `contracts/pcmb-token/`: the $PCMB token contract (Rust, NEP-141)
 - `contracts/economy/`: the economy contract (Rust): prize pool, runs and gem shop
 
@@ -118,12 +133,13 @@ Checks: `pnpm check` (types), `pnpm lint` and `pnpm test` (request signing and t
 - Submission: tag `hackathon-submission`, added on the final commit.
 - Everything built in the hackathon: [`pre-hackathon...main`](../../compare/pre-hackathon...main).
 
-**Pre-existing work:** the Pixel Climb game itself (the Solar2D build in `static/game/`) existed before 1 Nov 2026. It is committed here as compiled output only. What was built during the hackathon is this web app (the play page, the wallet integration and the economy endpoints) and the contracts in `contracts/`.
+**Pre-existing work:** the Pixel Climb game itself (the Solar2D build in `static/game/`) existed before 1 Nov 2026. It is committed here as compiled output only. What was built during the hackathon is this web app (the play page, the wallet integration and the economy endpoints), the contracts in `contracts/`, the web build script in `scripts/game-web/`, and the game's web bridge and HTML5 changes in the pixel-climb repo ([pixel-climb#1](https://github.com/hsjtechnologies/pixel-climb/pull/1) and later).
 
 ## Credits
 
 - [SvelteKit](https://svelte.dev) and [Svelte 5](https://svelte.dev), scaffolded with `sv` 1.3.0 (minimal template, TypeScript, Prettier, ESLint, Vercel adapter)
 - [Solar2D](https://solar2d.com) HTML5 runtime for the game build
+- [Silkscreen](https://kottke.org/plus/type/silkscreen/) pixel font by Jason Kottke, from the game, used in the game-over panel
 - [MetaMask](https://metamask.io) and NEAR's Ethereum RPC for the wallet
 - [near-api-js](https://github.com/near/near-api-js) and [FastNear](https://fastnear.com) RPC for the game server
 - AI tools: parts of the web app code and this README were written with AI coding tools and reviewed by the team.
