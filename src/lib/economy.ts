@@ -246,3 +246,17 @@ export const hexToBytes = (hex: string) =>
 /** Raw $PCMB to a short display string: 10500000000 -> "10.5". */
 export const formatPcmb = (raw: string) =>
 	(Number(BigInt(raw) / 10_000_000n) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+/**
+ * Time left in a round, sized to fit: `1d 4h`, `23h 44m`, then `44:05` in the last hour. Seconds
+ * only show in the last hour, so a daily round doesn't tick every second.
+ */
+export function formatTimeLeft(ms: number): string {
+	const s = Math.max(0, Math.ceil(ms / 1000));
+	const days = Math.floor(s / 86_400);
+	const hours = Math.floor((s % 86_400) / 3600);
+	const minutes = Math.floor((s % 3600) / 60);
+	if (days > 0) return `${days}d ${hours}h`;
+	if (hours > 0) return `${hours}h ${minutes}m`;
+	return `${minutes}:${String(s % 60).padStart(2, '0')}`;
+}

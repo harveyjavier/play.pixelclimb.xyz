@@ -9,6 +9,7 @@ import {
 	encodeFunctionCall,
 	ethAddressOf,
 	formatPcmb,
+	formatTimeLeft,
 	isPlausibleRun,
 	isReachableSince,
 	makeTicket,
@@ -209,4 +210,18 @@ test('by the server clock, a floor takes at least 2 seconds', () => {
 	assert.ok(!isReachableSince(10, 17_999));
 	assert.ok(!isReachableSince(100, 60_000));
 	assert.ok(isReachableSince(100, 198_000));
+});
+
+test('time left fits the round length', () => {
+	const sec = 1000;
+	const min = 60 * sec;
+	const hour = 60 * min;
+	assert.equal(formatTimeLeft(-5 * sec), '0:00');
+	assert.equal(formatTimeLeft(42 * sec), '0:42');
+	assert.equal(formatTimeLeft(5 * min), '5:00'); // a testnet round, as before
+	assert.equal(formatTimeLeft(44 * min + 5 * sec), '44:05');
+	assert.equal(formatTimeLeft(hour - 1), '1h 0m');
+	assert.equal(formatTimeLeft(23 * hour + 44 * min), '23h 44m');
+	assert.equal(formatTimeLeft(24 * hour), '1d 0h');
+	assert.equal(formatTimeLeft(28 * hour + 30 * min), '1d 4h');
 });
