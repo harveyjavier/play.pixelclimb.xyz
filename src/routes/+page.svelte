@@ -18,6 +18,9 @@
 		saving: boolean;
 		busy: boolean;
 		error: string;
+		/** The player's saved gems and what a gem revive costs; builds before pixel-climb#3 send neither. */
+		savedGems?: number;
+		gemCost?: number;
 	};
 	/** The open game-over panel: the run, whether it is saved, and the revive status. */
 	let over = $state<Panel>();
@@ -31,7 +34,7 @@
 
 	// The game ignores a reply whose id is not its latest game over (pcbridge.js).
 	// Focus goes back to the game too, so the space bar keeps working after a panel button.
-	const tell = (type: 'pc:revive' | 'pc:end', id?: number) => {
+	const tell = (type: 'pc:revive' | 'pc:revive-gems' | 'pc:end', id?: number) => {
 		game?.contentWindow?.postMessage({ type, id }, location.origin);
 		game?.focus();
 	};
@@ -114,6 +117,13 @@
 		refresh();
 	}
 
+	// Paid with the game's own saved gems, so the game takes them; nothing goes to the server.
+	function reviveWithGems() {
+		const id = over?.id;
+		over = undefined;
+		tell('pc:revive-gems', id);
+	}
+
 	function end() {
 		const id = over?.id;
 		over = undefined;
@@ -124,11 +134,21 @@
 	// { type: 'pc:revive', id } to continue the run or { type: 'pc:end', id } to end it.
 	function onmessage(e: MessageEvent) {
 		if (e.origin !== location.origin || e.source !== game?.contentWindow) return;
-		const { type, id, floor, gems, durationMs } = e.data ?? {};
+		const { type, id, floor, gems, durationMs, savedGems, gemCost } = e.data ?? {};
 		const counts = [floor, gems, durationMs];
 		if (type !== 'pc:gameover' || !counts.every((n) => Number.isSafeInteger(n) && n >= 0)) return;
 		if (id !== undefined && !Number.isSafeInteger(id)) return; // builds before pixel-climb#1 send no id
-		over = { id, floor, note: 'Saving run…', saving: true, busy: false, error: '' };
+		const hasGems = [savedGems, gemCost].every((n) => Number.isSafeInteger(n) && n >= 0);
+		const note = 'Saving run…';
+		over = {
+			id,
+			floor,
+			note,
+			saving: true,
+			busy: false,
+			error: '',
+			...(hasGems && { savedGems, gemCost })
+		};
 		submitRun(over, durationMs);
 	}
 
@@ -158,15 +178,15 @@
 	<div class="stats">
 		{#if economy}
 			{@const { state, player } = economy}
-			{@const gems = player?.gems ?? 0}
+			{@const revives = player?.gems ?? 0}
 			<span>
 				Round {state.round} · Pool {formatPcmb(state.pool)} $PCMB · {leftMs > 0
 					? `${clock(leftMs)} left`
 					: 'Paying out…'} · Best {player?.best_floor ?? 0}
 			</span>
 			<span class="balance"
-				>{formatPcmb(player?.balance ?? '0')} $PCMB · {gems}
-				{gems === 1 ? 'gem' : 'gems'}
+				>{formatPcmb(player?.balance ?? '0')} $PCMB · {revives}
+				{revives === 1 ? 'revive' : 'revives'}
 				{#if player && player.balance !== '0'}
 					{#if wallet}
 						· <button type="button" class="withdraw" onclick={withdraw} disabled={withdrawing}
@@ -209,6 +229,15 @@
 						? 'Reviving…'
 						: `Revive for ${formatPcmb(economy?.state.gem_price ?? '0')} $PCMB`}
 				</button>
+				{#if over.gemCost !== undefined && over.savedGems !== undefined}
+					<button
+						type="button"
+						onclick={reviveWithGems}
+						disabled={over.busy || over.savedGems < over.gemCost}
+					>
+						Revive for {over.gemCost} gems ({over.savedGems})
+					</button>
+				{/if}
 				{#if !canRevive && !over.busy && !over.saving}
 					<p class="hint">Not enough $PCMB yet. Earn it by placing in a round.</p>
 				{/if}

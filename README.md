@@ -58,7 +58,7 @@ The game server sends every transaction and pays the fees. The economy contract 
 | `POST /api/revive`   | Signed, with the gem count the page saw, so a copied request stops working after one purchase. Calls `buy_gem`; the page then tells the game to continue the run                                                                                 |
 | `POST /api/settle`   | Pays out the round if it has ended. Each open page calls it at a random moment in the 10 seconds after the countdown ends, so winnings show without waiting for someone's next run                                                               |
 
-When a run ends, the game sends `pc:gameover` with an `id`, the floor, gems and duration ([pixel-climb#1](https://github.com/hsjtechnologies/pixel-climb/pull/1)). The page saves the run and offers **Revive for N $PCMB** or **End run**, then replies `pc:revive` or `pc:end` with the same `id`.
+When a run ends, the game sends `pc:gameover` with an `id`, the floor, gems and duration ([pixel-climb#1](https://github.com/hsjtechnologies/pixel-climb/pull/1)), plus the player's saved gems and what a gem revive costs (50, [pixel-climb#3](https://github.com/hsjtechnologies/pixel-climb/pull/3)). The page saves the run and offers **Revive for N $PCMB**, **Revive for 50 gems** or **End run**, then replies `pc:revive`, `pc:revive-gems` or `pc:end` with the same `id`. A gem revive is paid from the gems saved in the game, so it never reaches the server; the "revives" count in the top bar is the $PCMB ones.
 
 Known limits:
 
