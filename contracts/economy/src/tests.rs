@@ -31,6 +31,7 @@ fn config() -> Config {
         price_step_bps: 500,
         price_decay_bps: 100,
         min_floor: 10,
+        round_pool: U128(0),
     }
 }
 
@@ -512,4 +513,143 @@ fn rejects_huge_price_step() {
     bad.price_step_bps = 10_001;
     at(1, owner());
     c.set_config(bad);
+}
+
+// ---------- per-round pool from the reserve ----------
+
+fn with_round_pool(c: &mut Economy, amount: u128) {
+    at(0, owner());
+    let mut new = config();
+    new.round_pool = U128(amount);
+    c.set_config(new);
+}
+
+fn fund_reserve(c: &mut Economy, amount: u128) {
+    transfer_in(c, owner(), amount, "reserve");
+}
+
+#[test]
+fn reserve_tops_up_each_round() {
+    let mut c = setup();
+    with_round_pool(&mut c, 100 * PCMB);
+    fund_reserve(&mut c, 1_000 * PCMB);
+    assert_eq!(c.get_state().reserve, U128(1_000 * PCMB));
+
+    // Round 1 has no pool yet; settling it fills round 2 from the reserve.
+    at(5, alice());
+    c.settle_round();
+    let s = c.get_state();
+    assert_eq!((s.pool, s.reserve), (U128(100 * PCMB), U128(900 * PCMB)));
+
+    // Round 2 pays its 100 out; round 3 is filled again.
+    at(6, server());
+    c.record_run(alice(), 12);
+    at(10, bob());
+    c.settle_round();
+    let s = c.get_state();
+    assert_eq!(c.get_player(alice()).balance, U128(100 * PCMB));
+    assert_eq!((s.pool, s.reserve), (U128(100 * PCMB), U128(800 * PCMB)));
+}
+
+#[test]
+fn unpaid_pool_takes_nothing_more_from_the_reserve() {
+    let mut c = setup();
+    with_round_pool(&mut c, 100 * PCMB);
+    fund_reserve(&mut c, 1_000 * PCMB);
+    at(5, alice());
+    c.settle_round();
+    // Nobody reaches the minimum floor, so the 100 carries over as it is.
+    at(10, alice());
+    c.settle_round();
+    let s = c.get_state();
+    assert_eq!((s.pool, s.reserve), (U128(100 * PCMB), U128(900 * PCMB)));
+}
+
+#[test]
+fn gem_payments_go_on_top_of_the_round_pool() {
+    let mut c = setup();
+    with_round_pool(&mut c, 100 * PCMB);
+    fund_reserve(&mut c, 1_000 * PCMB);
+    deposit(&mut c, alice(), 10 * PCMB);
+    at(1, alice());
+    c.buy_gem(alice());
+    at(5, alice());
+    c.settle_round();
+    assert_eq!(c.get_state().pool, U128(110 * PCMB));
+}
+
+#[test]
+fn short_reserve_gives_what_it_has() {
+    let mut c = setup();
+    with_round_pool(&mut c, 100 * PCMB);
+    fund_reserve(&mut c, 30 * PCMB);
+    at(5, alice());
+    c.settle_round();
+    let s = c.get_state();
+    assert_eq!((s.pool, s.reserve), (U128(30 * PCMB), U128(0)));
+}
+
+#[test]
+fn round_pool_off_leaves_the_reserve_alone() {
+    let mut c = setup();
+    fund_reserve(&mut c, 1_000 * PCMB);
+    at(5, alice());
+    c.settle_round();
+    let s = c.get_state();
+    assert_eq!((s.pool, s.reserve), (U128(0), U128(1_000 * PCMB)));
+}
+
+#[test]
+fn migrate_keeps_players_and_round() {
+    // The deployed layout, before reserve and round_pool.
+    at(0, owner());
+    let mut players = LookupMap::new(Key::Players);
+    players.insert(
+        alice(),
+        Player {
+            balance: U128(42 * PCMB),
+            gems: 3,
+        },
+    );
+    let mut best = IterableMap::new(Key::Best);
+    best.insert(alice(), 15);
+    let mut old = OldEconomy {
+        owner: owner(),
+        server: server(),
+        token: token(),
+        config: OldConfig {
+            round_minutes: 5,
+            gem_base_price: U128(10 * PCMB),
+            price_step_bps: 500,
+            price_decay_bps: 100,
+            min_floor: 10,
+        },
+        round: 47,
+        round_ends_at: START + 5 * NS_PER_MINUTE,
+        pool: 7 * PCMB,
+        next_pool: 2 * PCMB,
+        last_price: 10 * PCMB,
+        last_price_at: START,
+        best,
+        players,
+    };
+    // The real state is already in storage; in a test the collections need flushing first.
+    old.best.flush();
+    old.players.flush();
+    env::state_write(&old);
+
+    at(0, "economy.testnet".parse().unwrap());
+    let c = Economy::migrate(U128(1_000 * PCMB));
+    let s = c.get_state();
+    assert_eq!(
+        (s.round, s.pool, s.next_pool),
+        (47, U128(7 * PCMB), U128(2 * PCMB))
+    );
+    assert_eq!(
+        (s.reserve, s.config.round_pool),
+        (U128(0), U128(1_000 * PCMB))
+    );
+    assert_eq!(s.config.min_floor, 10);
+    let a = c.get_player(alice());
+    assert_eq!((a.balance, a.gems, a.best_floor), (U128(42 * PCMB), 3, 15));
 }
