@@ -1,3 +1,31 @@
+<script lang="ts" module>
+	import { encodeFunctionCall, ethAddressOf } from '#lib/economy.ts';
+
+	type Eth = {
+		request(args: { method: string; params?: unknown }): Promise<unknown>;
+		on?(event: string, cb: (value: unknown) => void): void;
+		removeListener?(event: string, cb: (value: unknown) => void): void;
+	};
+	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
+
+	/**
+	 * Moves `amount` raw $PCMB from the wallet into its game balance: MetaMask signs an
+	 * `ft_transfer_call` to the economy with msg "", which credits the sender (NEP-518 functionCall).
+	 * Resolves with the transaction hash once it is sent.
+	 */
+	export async function deposit(wallet: string, token: string, economy: string, amount: string) {
+		const eth = ethereum();
+		if (!eth) throw new Error('Install MetaMask first.');
+		const args = JSON.stringify({ receiver_id: economy, amount, msg: '' });
+		// 50 Tgas covers ft_transfer_call, the economy's ft_on_transfer and the token's resolve step.
+		const data = encodeFunctionCall(token, 'ft_transfer_call', args, 50n * 10n ** 12n, 1);
+		return eth.request({
+			method: 'eth_sendTransaction',
+			params: [{ from: wallet, to: ethAddressOf(token), value: '0x0', data }]
+		}) as Promise<string>;
+	}
+</script>
+
 <script lang="ts">
 	import { linkMessage } from '#lib/economy.ts';
 	import { playerId, savedLink, saveLink, signedPost, useWallet } from '#lib/player.ts';
@@ -10,13 +38,6 @@
 		rpcUrls: ['https://eth-rpc.testnet.near.org'],
 		blockExplorerUrls: ['https://testnet.nearblocks.io'] // eth-explorer-testnet.near.org is down (404)
 	};
-
-	type Eth = {
-		request(args: { method: string; params?: unknown }): Promise<unknown>;
-		on?(event: string, cb: (value: unknown) => void): void;
-		removeListener?(event: string, cb: (value: unknown) => void): void;
-	};
-	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
 
 	/** The linked wallet (lowercase), or null. Runs and payouts go to this account. */
 	let { account = $bindable(null) }: { account?: string | null } = $props();

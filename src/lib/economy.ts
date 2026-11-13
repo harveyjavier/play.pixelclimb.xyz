@@ -13,6 +13,8 @@ export type EconomyState = {
 	next_pool: string;
 	gem_price: string;
 	players_this_round: number;
+	/** The $PCMB token contract. */
+	token: string;
 	config: { round_minutes: number; gem_base_price: string; min_floor: number };
 };
 
@@ -20,7 +22,16 @@ export type EconomyState = {
 export type PlayerState = { best_floor: number; balance: string; gems: number };
 
 /** Response of `GET /api/state`. */
-export type StateResponse = { state: EconomyState; player: PlayerState | null };
+/**
+ * Response of `GET /api/state`. With a wallet as `?player=`, `tokens` is the $PCMB the wallet itself
+ * holds (outside the game), which the page offers to deposit into `economy`.
+ */
+export type StateResponse = {
+	state: EconomyState;
+	player: PlayerState | null;
+	economy: string;
+	tokens: string | null;
+};
 
 /**
  * What the page signs. `ts` is the page's clock in ms, so a captured request stops working soon.
@@ -133,6 +144,39 @@ export function verifyRequest(
 		// malformed signature
 	}
 	return valid ? data : 'Bad signature';
+}
+
+/** The address MetaMask sends to for a NEAR account: keccak256(account id), last 20 bytes (NEP-518). */
+export const ethAddressOf = (accountId: string) =>
+	'0x' + bytesToHex(keccak_256(new TextEncoder().encode(accountId)).subarray(12));
+
+const word = (n: bigint) => n.toString(16).padStart(64, '0');
+const dynamic = (text: string) => {
+	const hex = bytesToHex(new TextEncoder().encode(text));
+	return word(BigInt(hex.length / 2)) + hex.padEnd(Math.ceil(hex.length / 64) * 64, '0');
+};
+
+/**
+ * Ethereum transaction data that makes a NEP-518 wallet call a NEAR method:
+ * `functionCall(string receiver, string method, bytes args, uint64 gas, uint32 yoctoNear)`, ABI
+ * encoded. `gas` is in NEAR gas units; `yoctoNear` is the deposit below 10^6 yocto (the rest would go
+ * in the transaction's value).
+ */
+export function encodeFunctionCall(
+	receiver: string,
+	method: string,
+	args: string,
+	gas: bigint,
+	yoctoNear: number
+): string {
+	const tails = [receiver, method, args].map(dynamic);
+	let offset = 5 * 32; // five head words: three offsets, gas, yoctoNear
+	const offsets = tails.map((tail) => {
+		const at = offset;
+		offset += tail.length / 2;
+		return word(BigInt(at));
+	});
+	return '0x6179b707' + offsets.join('') + word(gas) + word(BigInt(yoctoNear)) + tails.join('');
 }
 
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!, (b) => parseInt(b, 16));

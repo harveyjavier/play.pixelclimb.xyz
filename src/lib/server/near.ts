@@ -22,12 +22,16 @@ import {
 	type SignedPayload
 } from '#lib/economy.ts';
 
-const ECONOMY = ECONOMY_CONTRACT;
+export const ECONOMY = ECONOMY_CONTRACT;
 const provider = new JsonRpcProvider({ url: NEAR_RPC_URL });
 
-export async function view<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
+export async function view<T>(
+	method: string,
+	args: Record<string, unknown> = {},
+	contractId = ECONOMY
+): Promise<T> {
 	try {
-		return (await provider.callFunction<T & object>({ contractId: ECONOMY, method, args })) as T;
+		return (await provider.callFunction<T & object>({ contractId, method, args })) as T;
 	} catch (e) {
 		console.error(`[economy] ${method} view failed`, e);
 		error(502, 'Could not reach NEAR testnet');
