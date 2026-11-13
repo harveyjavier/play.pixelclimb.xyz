@@ -3,7 +3,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { KeyType, PublicKey, base64Decode } from 'near-api-js';
+import { KeyType, PublicKey, base64Decode, base64Encode, type KeyPair } from 'near-api-js';
 
 /** `get_state` on the economy contract. Amounts are raw $PCMB (9 decimals). */
 export type EconomyState = {
@@ -42,7 +42,7 @@ export type StateResponse = {
 type Signed = { player: string; ts: number; wallet?: string; link?: string };
 export type SignedPayload = Signed &
 	(
-		| { action: 'run'; floor: number; durationMs: number }
+		| { action: 'run'; floor: number; durationMs: number; ticket: string }
 		| { action: 'revive'; gems: number }
 		| { action: 'link' }
 		| { action: 'withdraw' }
@@ -64,6 +64,13 @@ const MAX_FLOORS_PER_SECOND = 1;
 const MAX_RUN_MS = 60 * 60_000;
 /** `record_run` takes the floor as a u32. */
 const MAX_FLOOR = 2 ** 32 - 1;
+/**
+ * The same top speed, checked against the server's clock (`ticketAge`) instead of the page's: a tap
+ * every frame. The server's time also covers the menu, so a real run never comes close.
+ */
+const SERVER_FLOORS_PER_SECOND = 0.5;
+/** A higher floor counts as this one. Real testnet runs reached floors 10 to 24. */
+export const MAX_COUNTED_FLOOR = 100;
 
 /** A player's account is the hex of their browser key's public key (a NEAR implicit account). */
 export const isPlayerId = (id: unknown): id is string =>
@@ -115,6 +122,42 @@ export const isPlausibleRun = (floor: number, durationMs: number) =>
 	floor <= MAX_FLOOR &&
 	durationMs <= MAX_RUN_MS &&
 	floor <= 1 + (durationMs / 1000) * MAX_FLOORS_PER_SECOND;
+
+/** True when `floor` can be reached in `sinceMs` of the server's time. */
+export const isReachableSince = (floor: number, sinceMs: number) =>
+	floor <= 1 + (sinceMs / 1000) * SERVER_FLOORS_PER_SECOND;
+
+const ticketMessage = (player: string, issuedAt: number) => `pixelclimb-run:${player}:${issuedAt}`;
+
+/**
+ * A run ticket: the server's signed note that it saw `player` at `issuedAt` (ms). The page gets one
+ * before playing and sends it with each run, so the server times the run with its own clock.
+ */
+export function makeTicket(serverKey: KeyPair, player: string, issuedAt: number): string {
+	const message = new TextEncoder().encode(ticketMessage(player, issuedAt));
+	return `${issuedAt}:${base64Encode(serverKey.sign(message).signature)}`;
+}
+
+/** How long ago (ms) the server issued `ticket` to `player`, or an error message. */
+export function ticketAge(
+	ticket: unknown,
+	player: string,
+	serverKey: PublicKey,
+	now = Date.now()
+): number | string {
+	if (typeof ticket !== 'string') return 'Missing run ticket, reload the page';
+	const [at, signature] = ticket.split(':');
+	const issuedAt = Number(at);
+	if (!Number.isSafeInteger(issuedAt) || issuedAt > now || !signature) return 'Bad run ticket';
+	let valid = false;
+	try {
+		const message = new TextEncoder().encode(ticketMessage(player, issuedAt));
+		valid = serverKey.verify(message, base64Decode(signature));
+	} catch {
+		// malformed signature
+	}
+	return valid ? now - issuedAt : 'Bad run ticket';
+}
 
 /**
  * Checks a signed request and returns its payload, or an error message. The signature must come
