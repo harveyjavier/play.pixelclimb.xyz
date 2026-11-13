@@ -86,6 +86,17 @@
 	export async function deposit(wallet: string, token: string, economy: string, amount: string) {
 		const eth = ethereum();
 		if (!eth) throw new Error('Install MetaMask first.');
+		// The wallet's own NEAR pays the deposit's gas (about 0.009 NEAR); check before any prompt.
+		const near = await rpc(NEAR_RPC, 'query', {
+			request_type: 'view_account',
+			finality: 'final',
+			account_id: wallet
+		}).then(
+			(account) => BigInt(account.amount as string),
+			() => 0n // no account on NEAR yet
+		);
+		if (near < 10n ** 22n)
+			throw new Error('Deposit needs about 0.01 testnet NEAR in your wallet for gas.');
 		await onboard(eth, wallet);
 		const args = JSON.stringify({ receiver_id: economy, amount, msg: '' });
 		// 50 Tgas covers ft_transfer_call, the economy's ft_on_transfer and the token's resolve step.
