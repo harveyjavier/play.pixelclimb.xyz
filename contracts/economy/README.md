@@ -7,7 +7,7 @@ One NEAR contract that runs the $PCMB game economy (issue #8): it records runs, 
 | Field                 | Value                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------ |
 | Contract              | [`economy.pixelclimb.testnet`](https://testnet.nearblocks.io/address/economy.pixelclimb.testnet) |
-| Built from            | `1e66dc7`, code hash `3iiFVoCJMiMQinDPsvp2SYnQMRCHh98jhkonf6A8uD8X`                              |
+| Built from            | `71629d4`, code hash `BwSqf5J2o6ZZ8ZNgtZEj2TGCk7GUgsYdHVXgqxS4rzm6`                              |
 | Owner and game server | `pixelclimb.testnet` (the server changes with `set_server` once the play page has its own key)   |
 | Token                 | `pcmb.pixelclimb.testnet`                                                                        |
 | Settings              | The demo column below                                                                            |
