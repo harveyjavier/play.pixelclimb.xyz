@@ -4,6 +4,8 @@ The browser version of [Pixel Climb](https://play.google.com/store/apps/details?
 
 Built for [NEAR HACKATHON](https://nearhackathon.com/) (1–14 Nov 2026), track **Games With Real Economies**.
 
+**Play it: https://play.pixelclimb.xyz** (NEAR testnet, no install and no wallet needed to start)
+
 Pixel Climb is a one-tap climbing game. You tap to jump between walls, collect gems on the way up and try to beat your best floor. It is already live on Google Play. This repo puts the same game in the browser so players can try it without installing anything, and connects their wallet on NEAR.
 
 The landing site lives in a separate repo, [hsjtechnologies/pixelclimb.xyz](https://github.com/hsjtechnologies/pixelclimb.xyz). Both repos are the same entry.
@@ -35,17 +37,31 @@ The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pix
 
 The game economy runs in a second contract at [`economy.pixelclimb.testnet`](https://testnet.nearblocks.io/address/economy.pixelclimb.testnet), with the code in [`contracts/economy`](contracts/economy):
 
-- **Earn.** Each round has a prize pool of $PCMB, topped up from a reserve to 1,000 every round. When the round ends, the pool is split among players by their best floor.
-- **Spend.** A gem (a revive) costs $PCMB. The price rises 5% with each purchase and drops 1% a minute when nobody buys.
-- **Recycle.** Every $PCMB spent on gems goes into the next round's pool.
+- **Earn.** Each round has a prize pool of $PCMB. When the round ends, the pool is split among players who reached at least floor 10, in proportion to their best floor.
+- **Spend.** A revive costs $PCMB. The price rises 5% with each purchase and drops 1% a minute when nobody buys.
+- **Recycle.** Every $PCMB spent on revives goes into the next round's pool.
 
-The owner funds the reserve; `pnpm verify` shows how much is left.
+How the pool behaves in practice:
+
+- **Rounds last 5 minutes** (a demo setting; 1,440 minutes is the planned production value). A round pays out when someone triggers it: the page does this a few seconds after the countdown ends, and so does the next saved run.
+- **Each new round starts with 1,000 $PCMB** from a reserve, plus the revive payments of the round before. The owner funds the reserve; `pnpm verify` shows how much is left.
+- **One qualifying player takes the whole pool.** The split is by best floor among everyone who reached floor 10, so a player who is alone in a round gets all of it.
+- **If nobody reaches floor 10,** the pool carries over to the next round and takes nothing more from the reserve.
+- **Revives are paid from the game balance,** not from the wallet, so they never open MetaMask. **Withdraw** sends the whole game balance to the wallet; **Deposit** moves $PCMB from the wallet back into the game.
+
+To refill the reserve (owner key, near-cli-rs):
+
+```sh
+near contract call-function as-transaction pcmb.pixelclimb.testnet ft_transfer_call json-args '{"receiver_id":"economy.pixelclimb.testnet","amount":"100000000000000","msg":"reserve"}' prepaid-gas '100.0 Tgas' attached-deposit '1 yoctoNEAR' sign-as pixelclimb.testnet network-config testnet sign-with-legacy-keychain send
+```
+
+That adds 100,000 $PCMB, enough for 100 rounds that have a winner.
 
 ### Play first, connect a wallet to claim
 
 A new visitor earns with no wallet. On a player's first visit the page makes an ed25519 key in the browser (`localStorage`). Its public key, in hex, is a NEAR account (an [implicit account](https://docs.near.org/protocol/account-id#implicit-address)), and runs, payouts and revives go to that browser account.
 
-Connecting MetaMask makes the wallet the player's account. NEAR takes the lowercase `0x…` address as an account id ([NEP-518](https://github.com/near/NEPs/issues/518)). On connect the wallet signs one message that lets this browser's key play for it (`personal_sign`), and everything the browser account earned so far (balance, gems, this round's best floor) moves to the wallet. From then on runs, payouts and revives go to the wallet, and **Withdraw** sends the balance to it. MetaMask only asks once: the page signs each request with the browser key and sends the wallet's signature along, so a run or a revive never opens MetaMask. The code is in [`src/lib/player.ts`](src/lib/player.ts) and [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
+Connecting MetaMask makes the wallet the player's account. NEAR takes the lowercase `0x…` address as an account id ([NEP-518](https://github.com/near/NEPs/issues/518)). On connect the wallet signs one message that lets this browser's key play for it (`personal_sign`), and everything the browser account earned so far (balance, gems, this round's best floor) moves to the wallet. From then on runs, payouts and revives go to the wallet, **Withdraw** sends the balance to it, and **Deposit** sends the wallet's $PCMB back into the game with one MetaMask confirmation (an `ft_transfer_call` to the economy, sent through NEP-518). MetaMask only asks once: the page signs each request with the browser key and sends the wallet's signature along, so a run or a revive never opens MetaMask. The code is in [`src/lib/player.ts`](src/lib/player.ts) and [`src/lib/connect-wallet.svelte`](src/lib/connect-wallet.svelte).
 
 The game server sends every transaction and pays the fees. The economy contract lets the `server` account record runs, buy gems, move a browser account's earnings to its wallet and withdraw to a player's own wallet, so players never sign a NEAR transaction. Before relaying, the server checks the browser key's signature and, when the request names a wallet, that the wallet itself signed the link. A request that names no wallet acts on the browser account. A signed request expires after a minute and can be used once.
 
@@ -102,7 +118,24 @@ The second command prints the path of the new key file. Its `private_key` goes i
 
 ## Try it (judges)
 
-Requirements: Node 22.22.2 or newer, [pnpm](https://pnpm.io), and a desktop browser with [MetaMask](https://metamask.io). Brave's built-in wallet can block the game; use Chrome, Chromium or Firefox.
+### On the live site
+
+Open **https://play.pixelclimb.xyz** in a desktop browser (Chrome, Chromium or Firefox; Brave's built-in wallet can block the game). Steps 4 to 8 need [MetaMask](https://metamask.io).
+
+1. The bar above the game shows the round, the prize pool and the time left. Space, the up arrow or W jumps.
+2. Play past floor 10, with no wallet. The game-over panel says the run is saved, and when the round ends your share shows in the bar above the game.
+3. With a balance, crash again and click **Revive for N $PCMB**. The run continues, and the next revive costs 5% more.
+4. Click **Connect Wallet** and approve the account request, then **Add network** / **Switch network**, then sign the message that lets this browser play for your wallet. MetaMask now shows _NEAR Protocol Testnet_, the nav shows your `0x…` address, and the balance you earned is now the wallet's.
+5. Click **Withdraw** to send it to your wallet; it then shows in MetaMask and on NearBlocks.
+6. Click the address to open the account on testnet.nearblocks.io.
+7. Reload the page. You stay connected, and MetaMask doesn't ask again.
+8. In MetaMask, switch to any other network; the app disconnects. Click **Disconnect** to revoke the site's access.
+
+To check the contracts without a browser or wallet, run `node scripts/verify.mjs` (Node 22, no install).
+
+### Locally
+
+Requirements: Node 22.22.2 or newer and [pnpm](https://pnpm.io).
 
 ```sh
 pnpm install
@@ -110,13 +143,7 @@ cp .env.example .env   # fill in NEAR_SERVER_ACCOUNT and NEAR_SERVER_KEY to save
 pnpm dev
 ```
 
-1. Open the URL Vite prints (usually http://localhost:5173). The game loads in the 2:3 frame.
-2. Play past the minimum floor, with no wallet. The game-over panel says the run is saved, and when the round ends your share shows in the bar above the game.
-3. Click **Connect Wallet** and approve the account request, then **Add network** / **Switch network**, then sign the message that lets this browser play for your wallet. MetaMask now shows _NEAR Protocol Testnet_, the nav shows your `0x…` address, and the balance you earned is now the wallet's.
-4. Click **Withdraw** to send it to your wallet; it then shows in MetaMask and on NearBlocks.
-5. Click the address to open the account on testnet.nearblocks.io.
-6. Reload the page. You stay connected, and MetaMask doesn't ask again.
-7. In MetaMask, switch to any other network; the app disconnects. Click **Disconnect** to revoke the site's access.
+Open the URL Vite prints (usually http://localhost:5173) and follow the steps above. Without the server variables the page still shows the round, but runs and revives return 503.
 
 Checks: `pnpm check` (types), `pnpm lint` and `pnpm test` (request signing, the wallet link and the run check).
 
