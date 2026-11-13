@@ -14,7 +14,7 @@ const EXPECTED = {
 	decimals: 9,
 	supply: 5_000_000n * 10n ** 9n,
 	tokenCodeHash: 'NGHYs9XTKxQX9fykuyca96N11J1G5RtREQxrJ2CFcE8',
-	economyCodeHash: '3iiFVoCJMiMQinDPsvp2SYnQMRCHh98jhkonf6A8uD8X'
+	economyCodeHash: 'BwSqf5J2o6ZZ8ZNgtZEj2TGCk7GUgsYdHVXgqxS4rzm6'
 };
 
 async function query(params) {
