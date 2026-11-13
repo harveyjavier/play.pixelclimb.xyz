@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ConnectWallet, { deposit } from '#lib/connect-wallet.svelte';
 	import logo from '#lib/assets/logo.png';
-	import { formatPcmb, type StateResponse } from '#lib/economy.ts';
+	import { formatPcmb, formatTimeLeft, type StateResponse } from '#lib/economy.ts';
 	import { playerId, signedPost } from '#lib/player.ts';
 
 	let game = $state<HTMLIFrameElement>();
@@ -184,10 +184,9 @@
 		submitRun(over, durationMs);
 	}
 
-	const clock = (ms: number) => {
-		const s = Math.max(0, Math.ceil(ms / 1000));
-		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-	};
+	/** The round's end in the player's own time zone, e.g. "Ends Nov 14, 10:42 PM". */
+	const endsAt = (ms: number) =>
+		`Ends ${new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
 </script>
 
 <svelte:window {onmessage} />
@@ -212,9 +211,13 @@
 			{@const { state, player } = economy}
 			{@const revives = player?.gems ?? 0}
 			<span>
-				Round {state.round} · Pool {formatPcmb(state.pool)} $PCMB · {leftMs > 0
-					? `${clock(leftMs)} left`
-					: 'Paying out…'} · Best {player?.best_floor ?? 0}
+				Round {state.round} · Pool {formatPcmb(state.pool)} $PCMB ·
+				{#if leftMs > 0}
+					<span title={endsAt(state.round_ends_at_ms)}>{formatTimeLeft(leftMs)} left</span>
+				{:else}
+					Paying out…
+				{/if}
+				· Best {player?.best_floor ?? 0}
 			</span>
 			<span class="balance"
 				>{formatPcmb(player?.balance ?? '0')} $PCMB · {revives}
