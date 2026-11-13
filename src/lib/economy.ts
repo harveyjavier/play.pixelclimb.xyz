@@ -4,6 +4,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { KeyType, PublicKey, base64Decode, base64Encode, type KeyPair } from 'near-api-js';
+import type { Network } from '#lib/network.ts';
 
 /** `get_state` on the economy contract. Amounts are raw $PCMB (9 decimals). */
 export type EconomyState = {
@@ -21,12 +22,13 @@ export type EconomyState = {
 /** `get_player` on the economy contract. */
 export type PlayerState = { best_floor: number; balance: string; gems: number };
 
-/** Response of `GET /api/state`. */
 /**
  * Response of `GET /api/state`. With a wallet as `?player=`, `tokens` is the $PCMB the wallet itself
  * holds (outside the game), which the page offers to deposit into `economy`.
  */
 export type StateResponse = {
+	/** The NEAR network the server plays on. */
+	network: Network;
 	state: EconomyState;
 	player: PlayerState | null;
 	economy: string;

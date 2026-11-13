@@ -2,6 +2,7 @@
 // The contract lets this account record runs and buy gems for any player, so players never sign.
 import {
 	ECONOMY_CONTRACT,
+	NEAR_NETWORK,
 	NEAR_RPC_URL,
 	NEAR_SERVER_ACCOUNT,
 	NEAR_SERVER_KEY
@@ -24,9 +25,12 @@ import {
 	type PlayerState,
 	type SignedPayload
 } from '#lib/economy.ts';
+import { NETWORKS, type Network } from '#lib/network.ts';
 
-export const ECONOMY = ECONOMY_CONTRACT;
-const provider = new JsonRpcProvider({ url: NEAR_RPC_URL });
+export const NETWORK = NEAR_NETWORK as Network;
+const net = NETWORKS[NETWORK];
+export const ECONOMY = ECONOMY_CONTRACT ?? net.economy;
+const provider = new JsonRpcProvider({ url: NEAR_RPC_URL ?? net.rpc });
 
 export async function view<T>(
 	method: string,
@@ -37,7 +41,7 @@ export async function view<T>(
 		return (await provider.callFunction<T & object>({ contractId, method, args })) as T;
 	} catch (e) {
 		console.error(`[economy] ${method} view failed`, e);
-		error(502, 'Could not reach NEAR testnet');
+		error(502, `Could not reach ${net.label}`);
 	}
 }
 
@@ -77,7 +81,7 @@ export async function call<T>(
 		for (const [panic, status] of Object.entries(panics))
 			if (message.includes(panic)) error(status, panic);
 		console.error(`[economy] ${methodName} failed`, e);
-		error(502, `${methodName} failed on NEAR testnet`);
+		error(502, `${methodName} failed on ${net.label}`);
 	}
 }
 

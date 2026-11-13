@@ -1,14 +1,25 @@
-// Reads NEAR testnet and checks that the deployed $PCMB token and economy contract match this repo.
-// No wallet, keys or dependencies needed: `pnpm verify` (Node 22+). Exits 1 if a check fails.
+// Reads NEAR and checks that the deployed $PCMB token and economy contract match this repo.
+// No wallet, keys or dependencies needed: `pnpm verify` for testnet, `pnpm verify mainnet` for
+// mainnet (Node 22+). Exits 1 if a check fails.
 
-const RPC = process.env.NEAR_RPC_URL ?? 'https://test.rpc.fastnear.com';
-const TOKEN = 'pcmb.pixelclimb.testnet';
-const ECONOMY = 'economy.pixelclimb.testnet';
-const OWNER = 'pixelclimb.testnet';
+const NETWORKS = {
+	testnet: { rpc: 'https://test.rpc.fastnear.com', suffix: 'testnet', label: 'NEAR testnet' },
+	mainnet: { rpc: 'https://rpc.mainnet.fastnear.com', suffix: 'near', label: 'NEAR mainnet' }
+};
+const NETWORK = process.argv[2] ?? process.env.NEAR_NETWORK ?? 'testnet';
+if (!NETWORKS[NETWORK]) {
+	console.error(`Unknown network "${NETWORK}": use testnet or mainnet.`);
+	process.exit(1);
+}
+const { rpc, suffix, label } = NETWORKS[NETWORK];
+const RPC = process.env.NEAR_RPC_URL ?? rpc;
+const TOKEN = `pcmb.pixelclimb.${suffix}`;
+const ECONOMY = `economy.pixelclimb.${suffix}`;
+const OWNER = `pixelclimb.${suffix}`;
 
-// What this repo expects to find on testnet. After a redeploy, update the code hash here
-// (`cargo near build` prints the new one) and in the "Deployed on testnet" table of
-// contracts/economy/README.md, which records the economy hash too.
+// What this repo expects to find on both networks (the same code runs on each). After a redeploy,
+// update the code hash here (`cargo near build` prints the new one) and in the "Deployed" tables
+// of contracts/economy/README.md, which record the economy hash too.
 const EXPECTED = {
 	symbol: 'PCMB',
 	decimals: 9,
@@ -70,14 +81,14 @@ const [metadata, supply, tokenHash, economyHash, state, economyHolds, ownerHolds
 	]).catch((e) => {
 		// A network failure hides its reason in `cause`; a contract or RPC error has it in `message`.
 		const reason = e?.cause?.code ?? e?.cause?.message ?? e?.message ?? e;
-		console.error(`Could not read NEAR testnet through ${RPC}: ${reason}`);
+		console.error(`Could not read ${label} through ${RPC}: ${reason}`);
 		process.exit(1);
 	});
 
 const roundEnd = new Date(state.round_ends_at_ms);
 const roundOver = roundEnd.getTime() <= Date.now();
 
-console.log(`NEAR testnet via ${RPC}\n`);
+console.log(`${label} via ${RPC}\n`);
 console.log(`$PCMB token   ${TOKEN}`);
 console.log(`  name          ${metadata.name}`);
 console.log(`  total supply  ${pcmb(supply)} ${metadata.symbol}`);

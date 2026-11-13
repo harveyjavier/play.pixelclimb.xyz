@@ -29,7 +29,7 @@ The player's `0x…` address is their NEAR account, so players use the wallet th
 pnpm verify
 ```
 
-This reads NEAR testnet and prints the $PCMB supply, the prize pool, the gem price and the round end. It also checks that the token and economy contracts on testnet are the same code as [`contracts/`](contracts) in this repo. It needs no wallet or keys. `pnpm verify` needs the same Node as the rest of the repo (22.22.2 or newer). Without pnpm, `node scripts/verify.mjs` does the same on Node 22 and needs no install.
+This reads NEAR testnet and prints the $PCMB supply, the prize pool, the gem price and the round end. It also checks that the token and economy contracts on testnet are the same code as [`contracts/`](contracts) in this repo. It needs no wallet or keys. `pnpm verify mainnet` checks the mainnet contracts the same way. `pnpm verify` needs the same Node as the rest of the repo (22.22.2 or newer). Without pnpm, `node scripts/verify.mjs` does the same on Node 22 and needs no install.
 
 ### Economy
 
@@ -86,6 +86,19 @@ Known limits:
 - The link signature is saved per browser. A new browser or device asks MetaMask to sign once more; the balance stays with the wallet. The signature does not expire and can't be revoked; with it and the browser key someone could spend the wallet's game balance on gems, but not withdraw it anywhere else.
 - The game server's key can move any player's game balance (`merge_player`), so it has custody of balances that have not been withdrawn. It is a function-call key limited to the economy contract, kept only in the server's environment.
 - Each first withdrawal to a new wallet costs the economy account 0.00125 NEAR for token storage. Keep it topped up.
+
+### Mainnet
+
+The same contracts also run on NEAR mainnet, with daily rounds:
+
+| Account                                                                            | Role                                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`pcmb.pixelclimb.near`](https://nearblocks.io/token/pcmb.pixelclimb.near)         | $PCMB token, 5,000,000 supply                          |
+| [`economy.pixelclimb.near`](https://nearblocks.io/address/economy.pixelclimb.near) | Economy: 1,440-minute rounds, 1,000 $PCMB pool a round |
+| `server.pixelclimb.near`                                                           | Game server (function-call key for the economy only)   |
+| `pixelclimb.near`                                                                  | Owner                                                  |
+
+The site picks its network with the `NEAR_NETWORK` environment variable (`testnet` by default, or `mainnet`). It sets the economy contract, the RPC, the MetaMask network (NEAR Protocol, chain 397, on mainnet) and the explorer links. A mainnet deployment needs `NEAR_NETWORK=mainnet` and the mainnet server account and key; see [`.env.example`](.env.example).
 
 ### Rebuilding the game
 

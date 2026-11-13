@@ -17,6 +17,18 @@ One NEAR contract that runs the $PCMB game economy (issue #8): it records runs, 
 near contract call-function as-read-only economy.pixelclimb.testnet get_state json-args '{}' network-config testnet now
 ```
 
+## Deployed on mainnet
+
+| Field       | Value                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------- |
+| Contract    | [`economy.pixelclimb.near`](https://nearblocks.io/address/economy.pixelclimb.near)    |
+| Built from  | `82f3d60`, code hash `BwSqf5J2o6ZZ8ZNgtZEj2TGCk7GUgsYdHVXgqxS4rzm6` (same as testnet) |
+| Owner       | `pixelclimb.near`                                                                     |
+| Game server | `server.pixelclimb.near`                                                              |
+| Token       | `pcmb.pixelclimb.near`                                                                |
+| Settings    | Production: 1,440-minute rounds; otherwise as the demo column below                   |
+| First pool  | 1,000 $PCMB, plus a 100,000 $PCMB reserve                                             |
+
 ## How it works
 
 - **Earn.** Each round has a pool. When the round ends, `settle_round` splits it among players whose best floor is at or above `min_floor`, in proportion to that floor. Rounding leftovers, and the whole pool if nobody qualifies, carry over to the next round. Then the next pool is topped up from the reserve to `round_pool`, so every round has a prize while the reserve lasts. A pool that carried over takes nothing more from the reserve.
