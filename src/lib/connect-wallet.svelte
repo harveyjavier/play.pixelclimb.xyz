@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	import { KeyType, PublicKey } from 'near-api-js';
 	import { encodeAddKey, encodeFunctionCall, ethAddressOf, hexToBytes } from '#lib/economy.ts';
+	import { NETWORKS, type Chain, type Network } from '#lib/network.ts';
 
 	type Eth = {
 		request(args: { method: string; params?: unknown }): Promise<unknown>;
@@ -8,9 +9,6 @@
 		removeListener?(event: string, cb: (value: unknown) => void): void;
 	};
 	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
-
-	const ETH_RPC = 'https://eth-rpc.testnet.near.org';
-	const NEAR_RPC = 'https://test.rpc.fastnear.com';
 
 	async function rpc(url: string, method: string, params: unknown = []) {
 		const res = await fetch(url, {
@@ -35,12 +33,13 @@
 	 * account ("onboarding"). Adds it if missing: an `addKey` limited to `rlp_execute` on the
 	 * wallet's own account, sponsored by the relayer (gas price 1), then waits until NEAR has it.
 	 */
-	async function onboard(eth: Eth, wallet: string) {
-		const relayer = (await rpc(ETH_RPC, 'near_getPublicKey')).public_key as string;
+	async function onboard(eth: Eth, wallet: string, network: Network) {
+		const { rpc: nearRpc, chain } = NETWORKS[network];
+		const relayer = (await rpc(chain.rpcUrls[0], 'near_getPublicKey')).public_key as string;
 		if (!/^[0-9a-f]{64}$/i.test(relayer)) throw new Error('The NEAR relayer returned a bad key');
 		const key = new PublicKey({ keyType: KeyType.ED25519, data: hexToBytes(relayer) }).toString();
 		const hasKey = () =>
-			rpc(NEAR_RPC, 'query', {
+			rpc(nearRpc, 'query', {
 				request_type: 'view_access_key',
 				finality: 'final',
 				account_id: wallet,
@@ -83,11 +82,17 @@
 	 * `ft_transfer_call` to the economy with msg "", which credits the sender (NEP-518 functionCall).
 	 * Resolves with the transaction hash once it is sent.
 	 */
-	export async function deposit(wallet: string, token: string, economy: string, amount: string) {
+	export async function deposit(
+		network: Network,
+		wallet: string,
+		token: string,
+		economy: string,
+		amount: string
+	) {
 		const eth = ethereum();
 		if (!eth) throw new Error('Install MetaMask first.');
 		// The wallet's own NEAR pays the deposit's gas (about 0.009 NEAR); check before any prompt.
-		const near = await rpc(NEAR_RPC, 'query', {
+		const near = await rpc(NETWORKS[network].rpc, 'query', {
 			request_type: 'view_account',
 			finality: 'final',
 			account_id: wallet
@@ -96,8 +101,10 @@
 			() => 0n // no account on NEAR yet
 		);
 		if (near < 10n ** 22n)
-			throw new Error('Deposit needs about 0.01 testnet NEAR in your wallet for gas.');
-		await onboard(eth, wallet);
+			throw new Error(
+				`Deposit needs about 0.01 NEAR in your wallet for gas (${NETWORKS[network].label}).`
+			);
+		await onboard(eth, wallet, network);
 		const args = JSON.stringify({ receiver_id: economy, amount, msg: '' });
 		// 50 Tgas covers ft_transfer_call, the economy's ft_on_transfer and the token's resolve step.
 		const data = encodeFunctionCall(token, 'ft_transfer_call', args, 50n * 10n ** 12n, 1);
@@ -112,25 +119,25 @@
 	import { linkMessage } from '#lib/economy.ts';
 	import { playerId, savedLink, saveLink, signedPost, useWallet } from '#lib/player.ts';
 
-	// NEAR testnet's Ethereum-compatible RPC (NEP-518): MetaMask signs for a NEAR account named by its 0x address.
-	const CHAIN = {
-		chainId: '0x18e', // 398
-		chainName: 'NEAR Protocol Testnet',
-		nativeCurrency: { name: 'NEAR', symbol: 'NEAR', decimals: 18 },
-		rpcUrls: ['https://eth-rpc.testnet.near.org'],
-		blockExplorerUrls: ['https://testnet.nearblocks.io'] // eth-explorer-testnet.near.org is down (404)
-	};
-
-	/** The linked wallet (lowercase), or null. Runs and payouts go to this account. */
-	let { account = $bindable(null) }: { account?: string | null } = $props();
+	/**
+	 * `account`: the linked wallet (lowercase), or null. Runs and payouts go to this account.
+	 * `network`: the server's network, from `/api/state`. Connecting waits until it is known.
+	 */
+	let { account = $bindable(null), network }: { account?: string | null; network?: Network } =
+		$props();
+	const net = $derived(network && NETWORKS[network]);
+	// The scheme stays literal in the link, so the linter sees it is an external URL.
+	const explorerHost = $derived((net ?? NETWORKS.testnet).explorer.replace('https://', ''));
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
-	// MetaMask fires chainChanged for our own switch after connect() resolves, so only a move off NEAR testnet drops the session.
+	// MetaMask fires chainChanged for our own switch after connect() resolves, so only a move off the game's network drops the session.
 	$effect(() => {
 		const eth = ethereum();
+		const chain = net?.chain;
+		if (!chain) return;
 		const onChain = (id: unknown) => {
-			if (id !== CHAIN.chainId) drop();
+			if (id !== chain.chainId) drop();
 		};
 		const onAccounts = (accounts: unknown) => {
 			const [next] = accounts as string[];
@@ -146,7 +153,7 @@
 			?.request({ method: 'eth_accounts' })
 			.then(async (accounts) => {
 				const [first] = accounts as string[];
-				if (first && (await eth.request({ method: 'eth_chainId' })) === CHAIN.chainId)
+				if (first && (await eth.request({ method: 'eth_chainId' })) === chain.chainId)
 					await adopt(eth, first, false);
 			})
 			.catch(() => {}); // no session to restore
@@ -156,19 +163,19 @@
 		};
 	});
 
-	async function useNearTestnet(eth: Eth) {
+	async function useNetwork(eth: Eth, chain: Chain) {
 		try {
 			await eth.request({
 				method: 'wallet_switchEthereumChain',
-				params: [{ chainId: CHAIN.chainId }]
+				params: [{ chainId: chain.chainId }]
 			});
 		} catch (e) {
 			// 4902: MetaMask doesn't know the chain yet; adding it also switches to it.
 			if ((e as { code?: number }).code !== 4902) throw e;
-			await eth.request({ method: 'wallet_addEthereumChain', params: [CHAIN] });
+			await eth.request({ method: 'wallet_addEthereumChain', params: [chain] });
 		}
-		if ((await eth.request({ method: 'eth_chainId' })) !== CHAIN.chainId)
-			throw new Error('Switch MetaMask to NEAR Protocol Testnet.');
+		if ((await eth.request({ method: 'eth_chainId' })) !== chain.chainId)
+			throw new Error(`Switch MetaMask to ${chain.chainName}.`);
 	}
 
 	function drop() {
@@ -207,6 +214,7 @@
 
 	async function connect() {
 		const eth = ethereum();
+		if (!net) return; // the button stays disabled until the network is known
 		if (!eth) {
 			// Mobile browsers never get window.ethereum; reopen this page in MetaMask's in-app browser (docs.metamask.io deeplinks).
 			if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
@@ -220,7 +228,7 @@
 		error = null;
 		try {
 			const [first] = (await eth.request({ method: 'eth_requestAccounts' })) as string[];
-			await useNearTestnet(eth);
+			await useNetwork(eth, net.chain);
 			await adopt(eth, first, true);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not connect MetaMask.';
@@ -236,15 +244,15 @@
 	{/if}
 	{#if account}
 		<a
-			href={`https://testnet.nearblocks.io/address/${account}`}
+			href={`https://${explorerHost}/address/${account}`}
 			target="_blank"
 			rel="noopener noreferrer"
-			title={`${account} on ${CHAIN.chainName}`}
+			title={`${account} on ${net?.chain.chainName ?? 'NEAR'}`}
 			class="account">{account.slice(0, 6)}…{account.slice(-4)}</a
 		>
 		<button type="button" onclick={disconnect}>Disconnect</button>
 	{:else}
-		<button type="button" onclick={connect} disabled={busy}>
+		<button type="button" onclick={connect} disabled={busy || !net}>
 			{busy ? 'Connecting…' : 'Connect Wallet'}
 		</button>
 	{/if}

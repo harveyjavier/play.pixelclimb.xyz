@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { isPlayerId, isWallet, type StateResponse } from '#lib/economy.ts';
-import { ECONOMY, getPlayer, getState, view } from '#lib/server/near.ts';
+import { ECONOMY, NETWORK, getPlayer, getState, view } from '#lib/server/near.ts';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
@@ -16,5 +16,11 @@ export const GET: RequestHandler = async ({ url }) => {
 	const tokens = isWallet(id)
 		? await view<string>('ft_balance_of', { account_id: id }, state.token)
 		: null;
-	return Response.json({ state, player, economy: ECONOMY, tokens } satisfies StateResponse);
+	return Response.json({
+		network: NETWORK,
+		state,
+		player,
+		economy: ECONOMY,
+		tokens
+	} satisfies StateResponse);
 };

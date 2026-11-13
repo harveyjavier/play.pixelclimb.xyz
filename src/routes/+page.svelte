@@ -136,11 +136,11 @@
 
 	// The $PCMB the wallet holds goes back into the game balance, so it can pay for revives.
 	async function depositAll() {
-		const { state, economy: contract, tokens } = economy!;
+		const { network, state, economy: contract, tokens } = economy!;
 		moving = true;
 		walletError = '';
 		try {
-			await deposit(wallet!, state.token, contract, tokens!);
+			await deposit(network, wallet!, state.token, contract, tokens!);
 			setTimeout(refresh, 5000); // MetaMask returns once sent; NEAR finishes a few seconds later
 		} catch (e) {
 			walletError = (e as { message?: string }).message ?? 'Deposit failed';
@@ -205,7 +205,7 @@
 		<span class="title"
 			><img src={logo} alt="" width="26" height="26" /><span class="name">Pixel Climb</span></span
 		>
-		<ConnectWallet bind:account={wallet} />
+		<ConnectWallet bind:account={wallet} network={economy?.network} />
 	</nav>
 	<div class="stats">
 		{#if economy}

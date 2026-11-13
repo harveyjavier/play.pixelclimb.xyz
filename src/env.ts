@@ -1,16 +1,25 @@
 import { defineEnvVars } from '@sveltejs/kit/env';
+import { isNetwork } from '#lib/network.ts';
 
 // Server-only, read when the app starts. Set them in Vercel (or .env locally), never in the repo.
 // The server pair is optional so the page still serves without it; the /api POST routes then return 503.
 export const variables = defineEnvVars({
+	NEAR_NETWORK: {
+		description:
+			'testnet (default) or mainnet: picks the contracts, RPC, MetaMask network and explorer',
+		schema: (value) => {
+			if (value && !isNetwork(value)) throw new Error('NEAR_NETWORK must be testnet or mainnet');
+			return value || 'testnet';
+		}
+	},
 	ECONOMY_CONTRACT: {
-		description: 'Economy contract account (default economy.pixelclimb.testnet)',
-		schema: (value) => value || 'economy.pixelclimb.testnet'
+		description:
+			"Economy contract account (default: the network's, economy.pixelclimb.testnet or .near)",
+		schema: (value) => value || undefined
 	},
 	NEAR_RPC_URL: {
-		description:
-			'NEAR testnet RPC (default FastNear; rpc.testnet.near.org is deprecated and rate-limited)',
-		schema: (value) => value || 'https://test.rpc.fastnear.com'
+		description: "NEAR RPC (default: the network's FastNear RPC)",
+		schema: (value) => value || undefined
 	},
 	NEAR_SERVER_ACCOUNT: {
 		description: 'Game server account: the `server` set on the economy contract',
