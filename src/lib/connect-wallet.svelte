@@ -1,5 +1,6 @@
 <script lang="ts" module>
-	import { encodeFunctionCall, ethAddressOf } from '#lib/economy.ts';
+	import { KeyType, PublicKey } from 'near-api-js';
+	import { encodeAddKey, encodeFunctionCall, ethAddressOf, hexToBytes } from '#lib/economy.ts';
 
 	type Eth = {
 		request(args: { method: string; params?: unknown }): Promise<unknown>;
@@ -7,6 +8,75 @@
 		removeListener?(event: string, cb: (value: unknown) => void): void;
 	};
 	const ethereum = () => (window as unknown as { ethereum?: Eth }).ethereum;
+
+	const ETH_RPC = 'https://eth-rpc.testnet.near.org';
+	const NEAR_RPC = 'https://test.rpc.fastnear.com';
+
+	async function rpc(url: string, method: string, params: unknown = []) {
+		const res = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+		});
+		const body = (await res.json()) as {
+			result?: unknown;
+			error?: { message?: string; data?: unknown };
+		};
+		if (body.error)
+			throw new Error(`${body.error.message ?? 'RPC error'}: ${JSON.stringify(body.error.data)}`);
+		const result = body.result as Record<string, unknown>;
+		// NEAR reports some query failures (e.g. a missing access key) inside the result.
+		if (typeof result?.error === 'string') throw new Error(result.error);
+		return result;
+	}
+
+	/**
+	 * The relayer only sends a wallet's NEP-518 transactions once its key is on the wallet's NEAR
+	 * account ("onboarding"). Adds it if missing: an `addKey` limited to `rlp_execute` on the
+	 * wallet's own account, sponsored by the relayer (gas price 1), then waits until NEAR has it.
+	 */
+	async function onboard(eth: Eth, wallet: string) {
+		const relayer = (await rpc(ETH_RPC, 'near_getPublicKey')).public_key as string;
+		if (!/^[0-9a-f]{64}$/i.test(relayer)) throw new Error('The NEAR relayer returned a bad key');
+		const key = new PublicKey({ keyType: KeyType.ED25519, data: hexToBytes(relayer) }).toString();
+		const hasKey = () =>
+			rpc(NEAR_RPC, 'query', {
+				request_type: 'view_access_key',
+				finality: 'final',
+				account_id: wallet,
+				public_key: key
+			}).then(
+				() => true,
+				(e: Error) => {
+					// Only a missing account or key means "not onboarded"; anything else is a real error.
+					if (
+						/UNKNOWN_ACCOUNT|UNKNOWN_ACCESS_KEY|does not exist|doesn't exist|never been observed/.test(
+							e.message
+						)
+					)
+						return false;
+					throw e;
+				}
+			);
+		if (await hasKey()) return;
+		await eth.request({
+			method: 'eth_sendTransaction',
+			params: [
+				{
+					from: wallet,
+					to: ethAddressOf(wallet),
+					value: '0x0',
+					gasPrice: '0x1',
+					data: encodeAddKey(relayer, wallet, ['rlp_execute'])
+				}
+			]
+		});
+		for (let i = 0; i < 30; i++) {
+			await new Promise((r) => setTimeout(r, 2000));
+			if (await hasKey()) return;
+		}
+		throw new Error('NEAR account setup is taking long. Try the deposit again in a minute.');
+	}
 
 	/**
 	 * Moves `amount` raw $PCMB from the wallet into its game balance: MetaMask signs an
@@ -16,6 +86,7 @@
 	export async function deposit(wallet: string, token: string, economy: string, amount: string) {
 		const eth = ethereum();
 		if (!eth) throw new Error('Install MetaMask first.');
+		await onboard(eth, wallet);
 		const args = JSON.stringify({ receiver_id: economy, amount, msg: '' });
 		// 50 Tgas covers ft_transfer_call, the economy's ft_on_transfer and the token's resolve step.
 		const data = encodeFunctionCall(token, 'ft_transfer_call', args, 50n * 10n ** 12n, 1);
