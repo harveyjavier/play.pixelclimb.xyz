@@ -10,6 +10,9 @@ import {
 	ethAddressOf,
 	formatPcmb,
 	isPlausibleRun,
+	isReachableSince,
+	makeTicket,
+	ticketAge,
 	isWallet,
 	linkMessage,
 	linkedWallet,
@@ -28,7 +31,7 @@ function sign(payload: object, signer = key) {
 	return { payload: text, signature: base64Encode(signature) };
 }
 
-const run = { action: 'run', player, ts: now, floor: 12, durationMs: 30_000 };
+const run = { action: 'run', player, ts: now, floor: 12, durationMs: 30_000, ticket: 't' };
 
 test('accepts a request signed by the player key', () => {
 	assert.deepEqual(verifyRequest(sign(run), 'run', now), run as SignedPayload);
@@ -175,4 +178,35 @@ test('encodeAddKey matches viem for the NEP-518 addKey call', () => {
 	const key = '21dea25fbd244dca1f835a95f02a2e368f5a0dc9a935abd22462c4e9f8e5ecb0';
 	const wallet = '0x1234567890abcdef1234567890abcdef12345678';
 	assert.equal(encodeAddKey(key, wallet, ['rlp_execute']), expected);
+});
+
+const server = KeyPair.fromRandom('ed25519');
+
+test('a run ticket gives the server time since it was issued', () => {
+	const ticket = makeTicket(server, player, now - 40_000);
+	assert.equal(ticketAge(ticket, player, server.getPublicKey(), now), 40_000);
+});
+
+test('rejects a forged, moved or future run ticket', () => {
+	const pub = server.getPublicKey();
+	const forged = makeTicket(KeyPair.fromRandom('ed25519'), player, now - 1000);
+	assert.equal(ticketAge(forged, player, pub, now), 'Bad run ticket');
+	const other = keyToImplicitAddress(KeyPair.fromRandom('ed25519').getPublicKey());
+	assert.equal(
+		ticketAge(makeTicket(server, other, now - 1000), player, pub, now),
+		'Bad run ticket'
+	);
+	const [, signature] = makeTicket(server, player, now - 1000).split(':');
+	assert.equal(ticketAge(`${now - 999_999}:${signature}`, player, pub, now), 'Bad run ticket');
+	assert.equal(ticketAge(makeTicket(server, player, now + 1), player, pub, now), 'Bad run ticket');
+	assert.equal(ticketAge(undefined, player, pub, now), 'Missing run ticket, reload the page');
+	assert.equal(ticketAge('junk', player, pub, now), 'Bad run ticket');
+});
+
+test('by the server clock, a floor takes at least 2 seconds', () => {
+	assert.ok(isReachableSince(1, 0));
+	assert.ok(isReachableSince(10, 18_000));
+	assert.ok(!isReachableSince(10, 17_999));
+	assert.ok(!isReachableSince(100, 60_000));
+	assert.ok(isReachableSince(100, 198_000));
 });

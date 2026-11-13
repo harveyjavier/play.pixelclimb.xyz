@@ -10,6 +10,7 @@ import { error } from '@sveltejs/kit';
 import {
 	Account,
 	JsonRpcProvider,
+	KeyPair,
 	KeyPairSigner,
 	teraToGas,
 	type KeyPairString
@@ -17,6 +18,8 @@ import {
 import {
 	MAX_REQUEST_AGE_MS,
 	linkedWallet,
+	makeTicket,
+	ticketAge,
 	type EconomyState,
 	type PlayerState,
 	type SignedPayload
@@ -127,4 +130,22 @@ export function accountOf(req: SignedPayload): string {
 	const wallet = linkedWallet(req);
 	if (wallet === 'invalid') error(403, 'Wallet link is not valid, connect again');
 	return wallet ?? req.player;
+}
+
+let ticketKey: KeyPair | undefined;
+
+// Run tickets are signed with the server key, so they need no secret or storage of their own.
+function serverKey(): KeyPair {
+	if (!NEAR_SERVER_KEY) error(503, 'The game server key is not set');
+	return (ticketKey ??= KeyPair.fromString(NEAR_SERVER_KEY as KeyPairString));
+}
+
+/** A run ticket for `player`, stamped with the server's clock now. */
+export const issueTicket = (player: string) => makeTicket(serverKey(), player, Date.now());
+
+/** How long ago (ms) the server issued the run's ticket. Rejects a missing or forged one. */
+export function ticketAgeOf(req: SignedPayload & { action: 'run' }): number {
+	const age = ticketAge(req.ticket, req.player, serverKey().getPublicKey());
+	if (typeof age === 'string') error(422, age);
+	return age;
 }

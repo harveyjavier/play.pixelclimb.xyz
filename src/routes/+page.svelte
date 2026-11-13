@@ -24,6 +24,8 @@
 	};
 	/** The open game-over panel: the run, whether it is saved, and the revive status. */
 	let over = $state<Panel>();
+	/** The server's signed start time (`/api/run/start`). Fetched once: an older one is still valid. */
+	let ticket: Promise<string> | undefined;
 	let settledRound = 0;
 	let latest = 0; // the newest refresh; older responses are dropped
 
@@ -65,7 +67,19 @@
 		}
 	}
 
+	function runTicket(): Promise<string> {
+		ticket ??= fetch(`/api/run/start?player=${playerId()}`)
+			.then((res) => (res.ok ? res.json() : Promise.reject(new Error('No run ticket'))))
+			.then((data: { ticket: string }) => data.ticket)
+			.catch((e) => {
+				ticket = undefined; // try again at the next run
+				throw e;
+			});
+		return ticket;
+	}
+
 	$effect(() => {
+		runTicket().catch(() => {});
 		refresh();
 		const poll = setInterval(refresh, 20_000);
 		const clock = setInterval(tick, 1000);
@@ -80,12 +94,15 @@
 			const { recorded } = await signedPost<{ recorded: boolean }>('/api/run', {
 				action: 'run',
 				floor: panel.floor,
-				durationMs
+				durationMs,
+				ticket: await runTicket()
 			});
 			const min = economy?.state.config.min_floor ?? 0;
 			panel.note = recorded ? 'Run saved for this round' : `Reach floor ${min} to earn`;
 		} catch (e) {
 			panel.note = (e as Error).message;
+			// A ticket from before the server key changed: get a new one for the next run.
+			if (panel.note.includes('run ticket')) ticket = undefined;
 		}
 		panel.saving = false;
 		refresh();
