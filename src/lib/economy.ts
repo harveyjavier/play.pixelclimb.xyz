@@ -151,9 +151,20 @@ export const ethAddressOf = (accountId: string) =>
 	'0x' + bytesToHex(keccak_256(new TextEncoder().encode(accountId)).subarray(12));
 
 const word = (n: bigint) => n.toString(16).padStart(64, '0');
-const dynamic = (text: string) => {
-	const hex = bytesToHex(new TextEncoder().encode(text));
-	return word(BigInt(hex.length / 2)) + hex.padEnd(Math.ceil(hex.length / 64) * 64, '0');
+const bytes = (hex: string) =>
+	word(BigInt(hex.length / 2)) + hex.padEnd(Math.ceil(hex.length / 64) * 64, '0');
+const dynamic = (text: string) => bytes(bytesToHex(new TextEncoder().encode(text)));
+/** ABI-encodes a tuple: a bigint is a static word, a string is an already-encoded dynamic value. */
+const tuple = (parts: (bigint | string)[]) => {
+	let offset = parts.length * 32;
+	const tails: string[] = [];
+	const heads = parts.map((part) => {
+		if (typeof part === 'bigint') return word(part);
+		tails.push(part);
+		offset += part.length / 2;
+		return word(BigInt(offset - part.length / 2));
+	});
+	return heads.join('') + tails.join('');
 };
 
 /**
@@ -169,17 +180,23 @@ export function encodeFunctionCall(
 	gas: bigint,
 	yoctoNear: number
 ): string {
-	const tails = [receiver, method, args].map(dynamic);
-	let offset = 5 * 32; // five head words: three offsets, gas, yoctoNear
-	const offsets = tails.map((tail) => {
-		const at = offset;
-		offset += tail.length / 2;
-		return word(BigInt(at));
-	});
-	return '0x6179b707' + offsets.join('') + word(gas) + word(BigInt(yoctoNear)) + tails.join('');
+	const tail = [receiver, method, args].map(dynamic);
+	return '0x6179b707' + tuple([...tail, gas, BigInt(yoctoNear)]);
 }
 
-const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!, (b) => parseInt(b, 16));
+/**
+ * Ethereum transaction data that makes a NEP-518 wallet add a function-call key for `receiver`
+ * limited to `methods`: `addKey(uint8 kind, bytes key, uint64 nonce, bool fullAccess,
+ * bool limitedAllowance, uint128 allowance, string receiver, string[] methods)`, ABI encoded.
+ * `publicKey` is the raw ed25519 key in hex.
+ */
+export function encodeAddKey(publicKey: string, receiver: string, methods: string[]): string {
+	const names = word(BigInt(methods.length)) + tuple(methods.map(dynamic));
+	return '0x753ce5ab' + tuple([0n, bytes(publicKey), 0n, 0n, 0n, 0n, dynamic(receiver), names]);
+}
+
+export const hexToBytes = (hex: string) =>
+	Uint8Array.from(hex.match(/../g)!, (b) => parseInt(b, 16));
 
 /** Raw $PCMB to a short display string: 10500000000 -> "10.5". */
 export const formatPcmb = (raw: string) =>
