@@ -35,11 +35,11 @@ The in-game currency is **$PCMB**, a NEP-141 token on NEAR testnet at [`pcmb.pix
 
 The game economy runs in a second contract at [`economy.pixelclimb.testnet`](https://testnet.nearblocks.io/address/economy.pixelclimb.testnet), with the code in [`contracts/economy`](contracts/economy):
 
-- **Earn.** Each round has a prize pool of $PCMB. When the round ends, the pool is split among players by their best floor.
+- **Earn.** Each round has a prize pool of $PCMB, topped up from a reserve to 1,000 every round. When the round ends, the pool is split among players by their best floor.
 - **Spend.** A gem (a revive) costs $PCMB. The price rises 5% with each purchase and drops 1% a minute when nobody buys.
 - **Recycle.** Every $PCMB spent on gems goes into the next round's pool.
 
-The first pool holds 10,000 $PCMB.
+The owner funds the reserve; `pnpm verify` shows how much is left.
 
 ### Play first, connect a wallet to claim
 

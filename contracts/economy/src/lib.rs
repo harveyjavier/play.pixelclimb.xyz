@@ -48,6 +48,9 @@ pub struct Config {
     pub price_decay_bps: u32,
     /// Best floor a player needs to share the pool.
     pub min_floor: u32,
+    /// Pool each round starts with, topped up from the reserve (0 turns it off). Gem payments
+    /// add on top.
+    pub round_pool: U128,
 }
 
 impl Config {
@@ -90,6 +93,8 @@ pub struct StateView {
     pub round_ends_at_ms: u64,
     pub pool: U128,
     pub next_pool: U128,
+    /// $PCMB set aside to top up each round's pool to `config.round_pool`.
+    pub reserve: U128,
     pub gem_price: U128,
     pub players_this_round: u32,
     pub token: AccountId,
@@ -118,6 +123,7 @@ pub struct Economy {
     round_ends_at: u64,
     pool: u128,
     next_pool: u128,
+    reserve: u128,
     /// Price right after the last purchase (or config change), and when that was.
     last_price: u128,
     last_price_at: u64,
@@ -126,8 +132,68 @@ pub struct Economy {
     players: LookupMap<AccountId, Player>,
 }
 
+/// Settings before `round_pool`, as the deployed state stores them. Read once by `migrate`.
+#[near(serializers = [borsh])]
+struct OldConfig {
+    round_minutes: u64,
+    gem_base_price: U128,
+    price_step_bps: u32,
+    price_decay_bps: u32,
+    min_floor: u32,
+}
+
+/// The state before `reserve` and `round_pool`. Read once by `migrate`.
+#[near(serializers = [borsh])]
+struct OldEconomy {
+    owner: AccountId,
+    server: AccountId,
+    token: AccountId,
+    config: OldConfig,
+    round: u64,
+    round_ends_at: u64,
+    pool: u128,
+    next_pool: u128,
+    last_price: u128,
+    last_price_at: u64,
+    best: IterableMap<AccountId, u32>,
+    players: LookupMap<AccountId, Player>,
+}
+
 #[near]
 impl Economy {
+    /// Once, deployed with this version: moves the stored state to the layout with a reserve
+    /// (starts at 0) and `round_pool`. Players, balances and the round carry over unchanged.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate(round_pool: U128) -> Self {
+        let old: OldEconomy = env::state_read().expect("No state to migrate");
+        let c = old.config;
+        let config = Config {
+            round_minutes: c.round_minutes,
+            gem_base_price: c.gem_base_price,
+            price_step_bps: c.price_step_bps,
+            price_decay_bps: c.price_decay_bps,
+            min_floor: c.min_floor,
+            round_pool,
+        };
+        config.assert_valid();
+        Self {
+            owner: old.owner,
+            server: old.server,
+            token: old.token,
+            config,
+            round: old.round,
+            round_ends_at: old.round_ends_at,
+            pool: old.pool,
+            next_pool: old.next_pool,
+            reserve: 0,
+            last_price: old.last_price,
+            last_price_at: old.last_price_at,
+            best: old.best,
+            players: old.players,
+        }
+    }
+
     #[init]
     pub fn new(owner: AccountId, server: AccountId, token: AccountId, config: Config) -> Self {
         config.assert_valid();
@@ -140,6 +206,7 @@ impl Economy {
             round_ends_at: now + config.round_minutes * NS_PER_MINUTE,
             pool: 0,
             next_pool: 0,
+            reserve: 0,
             last_price: config.gem_base_price.0,
             last_price_at: now,
             config,
@@ -185,7 +252,8 @@ impl Economy {
     }
 
     /// Anyone, once the round is over: split the pool by best floor among players at or above the
-    /// minimum floor, then start the next round with the gem payments plus any rounding leftover.
+    /// minimum floor, then start the next round with any leftover, topped up from the reserve to
+    /// `round_pool`, plus the gem payments.
     pub fn settle_round(&mut self) {
         let now = env::block_timestamp();
         require!(now >= self.round_ends_at, "Round is still running");
@@ -204,7 +272,15 @@ impl Economy {
             paid += share;
         }
         log!("Round {} settled: paid {paid} of {}", self.round, self.pool);
-        self.pool = self.pool - paid + self.next_pool;
+        let carried = self.pool - paid;
+        let top_up = self
+            .config
+            .round_pool
+            .0
+            .saturating_sub(carried)
+            .min(self.reserve);
+        self.reserve -= top_up;
+        self.pool = carried + top_up + self.next_pool;
         self.next_pool = 0;
         self.best.clear();
         self.round += 1;
@@ -277,6 +353,7 @@ impl Economy {
             round_ends_at_ms: self.round_ends_at / 1_000_000,
             pool: U128(self.pool),
             next_pool: U128(self.next_pool),
+            reserve: U128(self.reserve),
             gem_price: U128(self.gem_price()),
             players_this_round: self.best.len(),
             token: self.token.clone(),
@@ -363,7 +440,8 @@ impl Economy {
 #[near]
 impl FungibleTokenReceiver for Economy {
     /// $PCMB sent with `ft_transfer_call`: msg `""` credits the sender's balance, `"pool"` adds to the
-    /// current round's pool. Any other msg is refunded.
+    /// current round's pool, `"reserve"` to the reserve that tops up each round. Any other msg is
+    /// refunded.
     fn ft_on_transfer(
         &mut self,
         sender_id: AccountId,
@@ -377,6 +455,7 @@ impl FungibleTokenReceiver for Economy {
         match msg.as_str() {
             "" => self.credit(&sender_id, amount.0),
             "pool" => self.pool += amount.0,
+            "reserve" => self.reserve += amount.0,
             _ => return PromiseOrValue::Value(amount),
         }
         PromiseOrValue::Value(U128(0))

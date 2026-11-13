@@ -89,6 +89,11 @@ console.log(
 );
 console.log(`  pool          ${pcmb(state.pool)} PCMB`);
 console.log(`  next pool     ${pcmb(state.next_pool)} PCMB`);
+// Contracts before the per-round pool (#25) have no reserve or round_pool.
+const reserve = state.reserve ?? '0';
+console.log(
+	`  reserve       ${pcmb(reserve)} PCMB, ${pcmb(state.config.round_pool ?? '0')} a round`
+);
 console.log(`  gem price     ${pcmb(state.gem_price)} PCMB`);
 console.log(`  round length  ${state.config.round_minutes} min`);
 console.log(`  min floor     ${state.config.min_floor}`);
@@ -109,10 +114,11 @@ check(
 );
 check('economy is paid in $PCMB', state.token === TOKEN, state.token);
 check('economy owner', state.owner === OWNER, state.owner);
+const owed = BigInt(state.pool) + BigInt(state.next_pool) + BigInt(reserve);
 check(
-	'economy holds enough $PCMB for both pools',
-	BigInt(economyHolds) >= BigInt(state.pool) + BigInt(state.next_pool),
-	`${pcmb(economyHolds)} held, ${pcmb(BigInt(state.pool) + BigInt(state.next_pool))} in pools`
+	'economy holds enough $PCMB for both pools and the reserve',
+	BigInt(economyHolds) >= owed,
+	`${pcmb(economyHolds)} held, ${pcmb(owed)} in pools and reserve`
 );
 check(
 	'gem price is at or above the base price',
