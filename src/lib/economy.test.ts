@@ -5,6 +5,8 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
+	encodeFunctionCall,
+	ethAddressOf,
 	formatPcmb,
 	isPlausibleRun,
 	isWallet,
@@ -130,4 +132,37 @@ test('a request names no wallet, its own wallet, or an invalid one', () => {
 	assert.equal(linkedWallet({ ...base, wallet: walletAddress }), 'invalid');
 	assert.equal(linkedWallet({ ...base, link }), 'invalid');
 	assert.equal(linkedWallet({ ...base, wallet: `0x${'1'.repeat(40)}`, link }), 'invalid');
+});
+
+test('the token address matches the one MetaMask shows (README)', () => {
+	assert.equal(
+		ethAddressOf('pcmb.pixelclimb.testnet'),
+		'0x937ca2395d64855e08c74c30947a545eef6c1bf1'
+	);
+});
+
+test('encodes a NEP-518 functionCall in the ABI layout', () => {
+	const w = (hex: string) => hex.padStart(64, '0');
+	const text = (hex: string) => hex.padEnd(64, '0');
+	const expected =
+		'0x6179b707' +
+		w('a0') + // receiver at byte 160, after the five head words
+		w('e0') + // method at 224
+		w('120') + // args at 288
+		w('1') + // gas
+		w('2') + // yoctoNear
+		w('1') +
+		text('61') + // "a"
+		w('1') +
+		text('62') + // "b"
+		w('2') +
+		text('7b7d'); // "{}"
+	assert.equal(encodeFunctionCall('a', 'b', '{}', 1n, 2), expected);
+});
+
+test('long arguments take as many words as they need', () => {
+	const args = 'x'.repeat(33);
+	const data = encodeFunctionCall('a', 'b', args, 1n, 0);
+	// selector + 5 head words + 2 short tails (2 words each) + 1 length word + 2 data words
+	assert.equal((data.length - 10) / 64, 5 + 4 + 3);
 });

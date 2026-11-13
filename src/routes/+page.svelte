@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ConnectWallet from '#lib/connect-wallet.svelte';
+	import ConnectWallet, { deposit } from '#lib/connect-wallet.svelte';
 	import logo from '#lib/assets/logo.png';
 	import { formatPcmb, type StateResponse } from '#lib/economy.ts';
 	import { playerId, signedPost } from '#lib/player.ts';
@@ -7,8 +7,8 @@
 	let game = $state<HTMLIFrameElement>();
 	/** The linked wallet: runs, payouts and revives use it. Without one, this browser's own account earns. */
 	let wallet = $state<string | null>(null);
-	let withdrawing = $state(false);
-	let withdrawError = $state('');
+	let moving = $state(false);
+	let walletError = $state('');
 	let economy = $state.raw<StateResponse>();
 	let now = $state(Date.now());
 	type Panel = {
@@ -105,12 +105,27 @@
 	}
 
 	async function withdraw() {
-		withdrawing = true;
-		withdrawError = '';
+		moving = true;
+		walletError = '';
 		await signedPost('/api/withdraw', { action: 'withdraw' }).catch(
-			(e) => (withdrawError = (e as Error).message)
+			(e) => (walletError = (e as Error).message)
 		);
-		withdrawing = false;
+		moving = false;
+		refresh();
+	}
+
+	// The $PCMB the wallet holds goes back into the game balance, so it can pay for revives.
+	async function depositAll() {
+		const { state, economy: contract, tokens } = economy!;
+		moving = true;
+		walletError = '';
+		try {
+			await deposit(wallet!, state.token, contract, tokens!);
+			setTimeout(refresh, 5000); // MetaMask returns once sent; NEAR finishes a few seconds later
+		} catch (e) {
+			walletError = (e as { message?: string }).message ?? 'Deposit failed';
+		}
+		moving = false;
 		refresh();
 	}
 
@@ -169,15 +184,20 @@
 				{gems === 1 ? 'gem' : 'gems'}
 				{#if player && player.balance !== '0'}
 					{#if wallet}
-						· <button type="button" class="withdraw" onclick={withdraw} disabled={withdrawing}
-							>{withdrawing ? 'Sending…' : 'Withdraw'}</button
+						· <button type="button" class="withdraw" onclick={withdraw} disabled={moving}
+							>{moving ? 'Sending…' : 'Withdraw'}</button
 						>
 					{:else}
 						· Connect a wallet to withdraw
 					{/if}
 				{/if}
-				{#if withdrawError}
-					<span role="alert" class="error" title={withdrawError}>{withdrawError}</span>
+				{#if wallet && economy.tokens && economy.tokens !== '0'}
+					· <button type="button" class="withdraw" onclick={depositAll} disabled={moving}
+						>{moving ? 'Sending…' : `Deposit ${formatPcmb(economy.tokens)}`}</button
+					>
+				{/if}
+				{#if walletError}
+					<span role="alert" class="error" title={walletError}>{walletError}</span>
 				{/if}
 			</span>
 		{:else}
