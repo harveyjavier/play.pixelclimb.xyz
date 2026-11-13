@@ -12,6 +12,21 @@ The Pixel Climb token on NEAR: a NEP-141 fungible token with NEP-148 metadata. I
 | Supply   | 5,000,000, minted to the owner at deploy                                                 |
 | Minting  | The owner can mint more with `mint`                                                      |
 
+### Deployed on mainnet
+
+The same code (code hash `NGHYs9XTKxQX9fykuyca96N11J1G5RtREQxrJ2CFcE8`, as on testnet) also runs on mainnet:
+
+| Field         | Value                                                                      |
+| ------------- | -------------------------------------------------------------------------- |
+| Contract      | [`pcmb.pixelclimb.near`](https://nearblocks.io/token/pcmb.pixelclimb.near) |
+| Owner         | `pixelclimb.near`                                                          |
+| Name          | Pixel Climb Token                                                          |
+| Metadata link | None: the icon is stored on-chain, and there is no `reference` file        |
+| Supply        | 5,000,000, minted to the owner at deploy                                   |
+| Deploy        | Transaction `9PQQ8BD74maVMF9WYKYfwGuqmcHX4cA84Q6myw5TC1Yu`                 |
+
+Not done yet on mainnet: registering the token in `address-map.near` (see below), so MetaMask can show it.
+
 ## Use it in MetaMask
 
 The play page connects MetaMask to NEAR testnet (chain 398). NEAR shows NEP-141 tokens to MetaMask as ERC-20 tokens, so PCMB works there like any other token.
